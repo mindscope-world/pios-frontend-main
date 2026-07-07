@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   getCommandCenter,
@@ -13,6 +13,8 @@ import { getPortfolioMetrics, listPositions } from "../../api/positions";
 import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptyState";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { ModeActions } from "../../components/execution/ModeActions";
+import { useChannelSocket } from "../../realtime/useChannelSocket";
+import { useMarketStream, type MarketPriceEvent } from "../../realtime/useMarketStream";
 
 const SYMBOLS = ["BTC/USDT", "EUR/USD", "XAU/USD"];
 
@@ -46,9 +48,14 @@ const DECISION_STYLES: Record<string, string> = {
   REDUCE: "bg-amber-bg text-amber border-amber-border",
 };
 
+function normalizeSym(s: string): string {
+  return s.replace(/\//g, "").toUpperCase();
+}
+
 export default function ExecutionPage() {
   const [symbol, setSymbol] = useState(SYMBOLS[0]);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const commandCenter = useCachedIntelligence(["command-center", symbol], () => getCommandCenter(symbol));
   const whyNotTrade = useCachedIntelligence(["why-not-trade", symbol], () => getWhyNotTrade(symbol));
@@ -57,8 +64,37 @@ export default function ExecutionPage() {
     queryFn: () => getMarketOrderbook({ symbol }) as Promise<OrderbookPayload>,
     refetchInterval: 8000,
   });
-  const portfolioMetrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000 });
-  const positions = useQuery({ queryKey: ["positions"], queryFn: listPositions, staleTime: 15000 });
+  const portfolioMetrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000, refetchInterval: 20000 });
+  const positions = useQuery({ queryKey: ["positions"], queryFn: listPositions, staleTime: 15000, refetchInterval: 15000 });
+
+  // Live push on top of the 4s poll above — /api/v1/ws's "command_center"
+  // channel is fed by the same system-computed snapshot the REST cache read
+  // serves (app/api/v1/endpoints/intelligence.py's command-center/current
+  // reads the identical `command_center:{symbol}` Redis key
+  // app/workers/intelligence_worker.py publishes to) — pushing it into the
+  // query cache is a straight latency win, not a different data source, so
+  // there's no correctness gap here unlike positions/equity_curve (see
+  // roadmap-development-progress.md's real-time wiring notes for why those
+  // two are NOT wired the same way — they're computed for a hardcoded
+  // system user, not the logged-in trader).
+  useChannelSocket("command_center", symbol, (msg) => {
+    // Untagged channel — this connection only subscribes to one channel per
+    // symbol today, but stay defensive per channelSocket.ts's own doc: only
+    // accept messages that actually look like a command-center payload.
+    if (typeof msg.decision === "string" || "error" in msg) {
+      queryClient.setQueryData(["command-center", symbol], msg);
+    }
+  });
+
+  // SSE live price ticker (/intelligence/stream) — independent of the
+  // worker-cache above, updates on every tick rather than the ~4s poll.
+  const [livePrice, setLivePrice] = useState<MarketPriceEvent | null>(null);
+  useEffect(() => setLivePrice(null), [symbol]);
+  useMarketStream([symbol], {
+    onPrice: (data) => {
+      if (normalizeSym(data.symbol) === normalizeSym(symbol)) setLivePrice(data);
+    },
+  });
 
   const cc = commandCenter.data && !isNotYetComputed(commandCenter.data) && !isNoMarketData(commandCenter.data)
     ? (commandCenter.data as unknown as CommandCenterPayload)
@@ -116,7 +152,22 @@ export default function ExecutionPage() {
             </span>
           </div>
           <div className="p-3.5">
-            {cc?.live_market?.price != null ? (
+            {livePrice != null ? (
+              <div className="flex items-baseline gap-2 py-6 text-center justify-center">
+                <span className="font-[family-name:var(--font-cond)] text-4xl font-semibold text-text-primary">
+                  {livePrice.price.toLocaleString()}
+                </span>
+                <span className="flex items-center gap-1 text-xs text-green">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green" /> live
+                </span>
+                {livePrice.change_pct != null && (
+                  <span className={`text-xs ${livePrice.change_pct >= 0 ? "text-green" : "text-red"}`}>
+                    {livePrice.change_pct >= 0 ? "+" : ""}
+                    {livePrice.change_pct.toFixed(2)}%
+                  </span>
+                )}
+              </div>
+            ) : cc?.live_market?.price != null ? (
               <div className="flex items-baseline gap-2 py-6 text-center justify-center">
                 <span className="font-[family-name:var(--font-cond)] text-4xl font-semibold text-text-primary">
                   {cc.live_market.price.toLocaleString()}

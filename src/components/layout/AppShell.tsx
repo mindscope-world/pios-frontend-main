@@ -18,14 +18,15 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// 5 destinations in 3 groups — mockup's reduction from a page-per-domain IA.
-// Orders/positions/audit content lives one tap in from Portfolio / Risk &
-// Safety rather than as separate top-level nav items (Tier 1, not Tier 0).
+// Mockup's reduction from a page-per-domain IA, plus Orders promoted back to
+// a top-level destination once the order history/detail screen was built —
+// positions/audit still live one tap in from Portfolio / Risk & Safety.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Live",
     items: [
       { to: "/execution", label: "Execution", icon: "◈" },
+      { to: "/orders", label: "Orders", icon: "▤" },
       { to: "/portfolio", label: "Portfolio", icon: "⊙" },
     ],
   },

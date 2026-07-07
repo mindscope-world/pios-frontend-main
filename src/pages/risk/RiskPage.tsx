@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getRiskMetrics, getKillSwitchHistory } from "../../api/risk";
 import { getBehaviorSession } from "../../api/behavior";
 import { NullableNumber } from "../../components/ui/NullableNumber";
+import { RiskLimitsAdmin } from "../../components/risk/RiskLimitsAdmin";
 import { useAuthStore } from "../../stores/authStore";
 
 const STATUS_TONE: Record<string, string> = {
@@ -130,6 +131,8 @@ export default function RiskPage() {
           </table>
         )}
       </div>
+
+      {isAdmin && <RiskLimitsAdmin />}
 
       <div className="rounded-[10px] border border-surface-border bg-surface-raised p-4 text-[11.5px] leading-relaxed text-text-faint">
         Alerts live in the bell icon at the top of every screen, so they're visible no matter where you are, not just

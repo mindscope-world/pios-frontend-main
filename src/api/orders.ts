@@ -22,6 +22,10 @@ export function listOrders(params: { page?: number; page_size?: number; status?:
   return apiFetch<PaginatedResponse<OrderOut>>(`/orders${s ? `?${s}` : ""}`);
 }
 
+export function getOrder(orderId: string) {
+  return apiFetch<OrderOut>(`/orders/${orderId}`);
+}
+
 export function cancelOrder(orderId: string) {
   return apiFetch<CancelOrderResponse>(`/orders/${orderId}`, { method: "DELETE" });
 }

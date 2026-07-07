@@ -6,10 +6,15 @@ import { getRiskMetrics } from "../../api/risk";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 
 export default function PortfolioPage() {
-  const positions = useQuery({ queryKey: ["positions"], queryFn: listPositions, staleTime: 15000 });
-  const metrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000 });
-  const equity = useQuery({ queryKey: ["equity-curve"], queryFn: getEquityCurve, staleTime: 30000 });
-  const risk = useQuery({ queryKey: ["risk-metrics"], queryFn: getRiskMetrics, staleTime: 20000 });
+  // Positions/equity_curve/portfolio_metrics are computed for a hardcoded
+  // system user server-side (see app/workers/intelligence_worker.py) and
+  // can't be pushed per-trader over the "positions"/"equity_curve" WS
+  // channels — see roadmap-development-progress.md. Plain interval polling
+  // is the honest stopgap until the backend publishes these per-user.
+  const positions = useQuery({ queryKey: ["positions"], queryFn: listPositions, staleTime: 15000, refetchInterval: 15000 });
+  const metrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000, refetchInterval: 20000 });
+  const equity = useQuery({ queryKey: ["equity-curve"], queryFn: getEquityCurve, staleTime: 30000, refetchInterval: 30000 });
+  const risk = useQuery({ queryKey: ["risk-metrics"], queryFn: getRiskMetrics, staleTime: 20000, refetchInterval: 20000 });
 
   const openPositions = positions.data?.filter((p) => p.is_open) ?? [];
 
