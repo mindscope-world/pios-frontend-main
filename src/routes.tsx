@@ -13,6 +13,10 @@ import StrategyDetailPage from "./pages/strategies/StrategyDetailPage";
 import RiskPage from "./pages/risk/RiskPage";
 import ConnectionsPage from "./pages/connections/ConnectionsPage";
 import IntelligencePage from "./pages/intelligence/IntelligencePage";
+import CapitalPage from "./pages/capital/CapitalPage";
+import AlertsPage from "./pages/alerts/AlertsPage";
+import AuditPage from "./pages/audit/AuditPage";
+import ExecutionQualityPage from "./pages/execution_quality/ExecutionQualityPage";
 
 // Started as a 5-destination IA (pi-osq-execution-intelligence-v3.html)
 // collapsing orders/positions/alerts/audit into Portfolio / Risk & Safety.
@@ -37,11 +41,19 @@ export const router = createBrowserRouter([
           { path: "/strategies", element: <StrategiesPage /> },
           { path: "/strategies/:strategyId", element: <StrategyDetailPage /> },
           { path: "/risk", element: <RiskPage /> },
-          { path: "/alerts", element: <Navigate to="/risk" replace /> },
-          { path: "/audit", element: <Navigate to="/risk" replace /> },
+          { path: "/alerts", element: <AlertsPage /> },
           { path: "/connections", element: <ConnectionsPage /> },
           { path: "/brokers", element: <Navigate to="/connections" replace /> },
           { path: "/intelligence", element: <IntelligencePage /> },
+          { path: "/capital", element: <CapitalPage /> },
+          { path: "/execution-quality", element: <ExecutionQualityPage /> },
+          {
+            // GET /audit is require_audit (admin + compliance + quant)
+            // server-side — mirror it here rather than let other roles hit
+            // a bare 403 after already seeing the page shell render.
+            element: <RequireRole roles={["admin", "compliance", "quant"]} />,
+            children: [{ path: "/audit", element: <AuditPage /> }],
+          },
         ],
       },
     ],

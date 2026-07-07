@@ -317,3 +317,48 @@ export interface KillSwitchEventOut {
   status: string;
   created_at: string;
 }
+
+// ── Alerts — mirrors app/schemas/all_schemas.py AlertOut/AlertAckRequest and
+// app/models/all_models.py:34 SeverityEnum ("P1".."P4", P1 highest) exactly.
+// GET/ack routes are get_current_user (any authenticated role) server-side —
+// no role gate needed client-side. ──────────────────────────────────────────
+
+export type AlertSeverity = "P1" | "P2" | "P3" | "P4";
+
+export interface AlertOut {
+  id: string;
+  severity: AlertSeverity;
+  source: string;
+  category: string;
+  title: string;
+  message: string;
+  strategy_id: string | null;
+  symbol_id: number | null;
+  is_acknowledged: boolean;
+  ack_note: string | null;
+  acknowledged_at: string | null;
+  created_at: string;
+}
+
+// ── Audit — mirrors app/schemas/all_schemas.py AuditEntryOut exactly.
+// GET /audit and /audit/verify are require_audit (admin + compliance + quant)
+// server-side. ───────────────────────────────────────────────────────────────
+
+export interface AuditEntryOut {
+  id: number;
+  event_time: string;
+  actor_email: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  record_hash: string;
+  prev_hash: string | null;
+}
+
+export interface AuditVerifyResult {
+  chain_intact: boolean;
+  total_entries: number;
+  broken_at_id: number | null;
+}

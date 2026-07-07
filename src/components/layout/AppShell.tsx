@@ -20,7 +20,8 @@ interface NavGroup {
 
 // Mockup's reduction from a page-per-domain IA, plus Orders promoted back to
 // a top-level destination once the order history/detail screen was built —
-// positions/audit still live one tap in from Portfolio / Risk & Safety.
+// positions still lives one tap in from Portfolio. Alerts/Audit were folded
+// into Risk & Safety as redirects until their own screens existed; now real.
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Live",
@@ -34,7 +35,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "On demand",
     items: [
       { to: "/intelligence", label: "Intelligence", icon: "◎" },
+      { to: "/capital", label: "Capital", icon: "⊛" },
       { to: "/risk", label: "Risk & Safety", icon: "🛡" },
+      { to: "/alerts", label: "Alerts", icon: "⚑" },
+      { to: "/execution-quality", label: "Execution Quality", icon: "⧗" },
     ],
   },
   {
@@ -46,12 +50,23 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+// GET /audit is require_audit (admin + compliance + quant) server-side —
+// appended conditionally below rather than listed statically so other roles
+// never see a nav entry that would 403.
+const AUDIT_ROLES = new Set(["admin", "compliance", "quant"]);
+
 export function AppShell() {
   const user = useAuthStore((s) => s.user);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const clear = useAuthStore((s) => s.clear);
   const navigate = useNavigate();
   const [killModalOpen, setKillModalOpen] = useState(false);
+
+  const navGroups = NAV_GROUPS.map((group) =>
+    group.label === "On demand" && user?.role && AUDIT_ROLES.has(user.role)
+      ? { ...group, items: [...group.items, { to: "/audit", label: "Audit", icon: "📜" }] }
+      : group,
+  );
 
   const handleLogout = async () => {
     if (refreshToken) {
@@ -100,7 +115,7 @@ export function AppShell() {
         className="fixed left-0 overflow-y-auto border-r border-surface-border bg-surface-raised py-4"
         style={{ top: "var(--nav-h)", width: "var(--side-w)", height: "calc(100vh - var(--nav-h))" }}
       >
-        {NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <div key={group.label}>
             <div className="mt-3.5 px-[18px] pb-1 text-[9px] uppercase tracking-[.1em] text-text-ghost first:mt-0">
               {group.label}
