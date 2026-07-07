@@ -39,6 +39,11 @@ export function refreshOnce(): Promise<string | null> {
     refreshPromise = (async () => {
       const token = useAuthStore.getState().refreshToken ?? getStoredRefreshToken();
       if (!token) return null;
+      // Preserve whichever storage this session was remembered into — the
+      // refresh token rotates every call, so re-deriving "remember" from
+      // where the OLD token currently lives keeps a "remembered" session
+      // from silently downgrading to session-only storage on refresh.
+      const remembered = localStorage.getItem("pios.refreshToken") !== null;
       const data = await requestRefresh(token);
       if (!data) {
         useAuthStore.getState().clear();
@@ -48,6 +53,7 @@ export function refreshOnce(): Promise<string | null> {
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
         user: data.user,
+        remember: remembered,
       });
       return data.access_token;
     })().finally(() => {

@@ -3,6 +3,7 @@ import { RequireRole } from "./components/auth/RequireRole";
 import { AppShell } from "./components/layout/AppShell";
 import LandingPage from "./pages/landing/LandingPage";
 import Login from "./pages/auth/Login";
+import Signup from "./pages/auth/Signup";
 import MfaSetup from "./pages/auth/MfaSetup";
 import ExecutionPage from "./pages/execution/ExecutionPage";
 import OrdersPage from "./pages/orders/OrdersPage";
@@ -28,6 +29,7 @@ import UsersPage from "./pages/users/UsersPage";
 export const router = createBrowserRouter([
   { path: "/", element: <LandingPage /> },
   { path: "/login", element: <Login /> },
+  { path: "/signup", element: <Signup /> },
   {
     element: <RequireRole />,
     children: [

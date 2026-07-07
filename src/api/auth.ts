@@ -15,6 +15,18 @@ export function login(payload: LoginPayload) {
   });
 }
 
+// POST /auth/register (auth.py) auto-logs-in on success (returns a TokenPair,
+// same shape as /login) and always assigns role="trader" server-side
+// regardless of what's sent — RegisterRequest.role is accepted by the schema
+// but the endpoint hardcodes it. No email verification step exists.
+export function register(payload: { full_name: string; email: string; password: string }) {
+  return apiFetch<TokenPair>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    skipAuth: true,
+  });
+}
+
 export function logout(refreshToken: string) {
   return apiFetch<MessageResponse>("/auth/logout", {
     method: "POST",

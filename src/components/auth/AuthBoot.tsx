@@ -3,10 +3,12 @@ import { refreshOnce } from "../../api/client";
 import { useAuthStore } from "../../stores/authStore";
 
 /**
- * Runs once on app boot: attempts to rehydrate a session from the
- * sessionStorage-backed refresh token (see authStore.ts) before any
- * protected route renders. Covers the "no session at all" case explicitly,
- * since refreshOnce() only calls setSession/clear when a token was present.
+ * Runs once on app boot: attempts to rehydrate a session from the stored
+ * refresh token — localStorage or sessionStorage depending on whether
+ * "Remember this terminal" was checked at login (see authStore.ts) — before
+ * any protected route renders. Covers the "no session at all" case
+ * explicitly, since refreshOnce() only calls setSession/clear when a token
+ * was present.
  */
 export function AuthBoot({ children }: { children: ReactNode }) {
   const isHydrating = useAuthStore((s) => s.isHydrating);
