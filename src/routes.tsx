@@ -17,6 +17,8 @@ import CapitalPage from "./pages/capital/CapitalPage";
 import AlertsPage from "./pages/alerts/AlertsPage";
 import AuditPage from "./pages/audit/AuditPage";
 import ExecutionQualityPage from "./pages/execution_quality/ExecutionQualityPage";
+import DataQualityPage from "./pages/data_quality/DataQualityPage";
+import UsersPage from "./pages/users/UsersPage";
 
 // Started as a 5-destination IA (pi-osq-execution-intelligence-v3.html)
 // collapsing orders/positions/alerts/audit into Portfolio / Risk & Safety.
@@ -47,12 +49,20 @@ export const router = createBrowserRouter([
           { path: "/intelligence", element: <IntelligencePage /> },
           { path: "/capital", element: <CapitalPage /> },
           { path: "/execution-quality", element: <ExecutionQualityPage /> },
+          { path: "/data-quality", element: <DataQualityPage /> },
           {
             // GET /audit is require_audit (admin + compliance + quant)
             // server-side — mirror it here rather than let other roles hit
             // a bare 403 after already seeing the page shell render.
             element: <RequireRole roles={["admin", "compliance", "quant"]} />,
             children: [{ path: "/audit", element: <AuditPage /> }],
+          },
+          {
+            // Every users.py route is require_admin (list/create/deactivate)
+            // or self-or-admin (get/update) server-side; this screen only
+            // ever acts on other users, so gate the whole page to admin.
+            element: <RequireRole roles={["admin"]} />,
+            children: [{ path: "/users", element: <UsersPage /> }],
           },
         ],
       },

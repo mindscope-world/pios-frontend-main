@@ -39,6 +39,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/risk", label: "Risk & Safety", icon: "🛡" },
       { to: "/alerts", label: "Alerts", icon: "⚑" },
       { to: "/execution-quality", label: "Execution Quality", icon: "⧗" },
+      { to: "/data-quality", label: "Data Quality", icon: "◫" },
     ],
   },
   {
@@ -54,6 +55,8 @@ const NAV_GROUPS: NavGroup[] = [
 // appended conditionally below rather than listed statically so other roles
 // never see a nav entry that would 403.
 const AUDIT_ROLES = new Set(["admin", "compliance", "quant"]);
+// Every users.py route is require_admin or self-or-admin — same pattern.
+const USERS_ROLES = new Set(["admin"]);
 
 export function AppShell() {
   const user = useAuthStore((s) => s.user);
@@ -62,11 +65,15 @@ export function AppShell() {
   const navigate = useNavigate();
   const [killModalOpen, setKillModalOpen] = useState(false);
 
-  const navGroups = NAV_GROUPS.map((group) =>
-    group.label === "On demand" && user?.role && AUDIT_ROLES.has(user.role)
-      ? { ...group, items: [...group.items, { to: "/audit", label: "Audit", icon: "📜" }] }
-      : group,
-  );
+  const navGroups = NAV_GROUPS.map((group) => {
+    if (group.label === "On demand" && user?.role && AUDIT_ROLES.has(user.role)) {
+      return { ...group, items: [...group.items, { to: "/audit", label: "Audit", icon: "📜" }] };
+    }
+    if (group.label === "Reference" && user?.role && USERS_ROLES.has(user.role)) {
+      return { ...group, items: [...group.items, { to: "/users", label: "Users", icon: "☺" }] };
+    }
+    return group;
+  });
 
   const handleLogout = async () => {
     if (refreshToken) {
