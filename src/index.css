@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme {
+  /* Base surface stack — pi-osq-execution-intelligence-v3.html palette,
+     the client-supplied design source of truth (replaces the earlier
+     CrypGo reference palette). */
+  --color-surface-base: #06080b;
+  --color-surface-raised: #0a0d12;
+  --color-surface-card: #10141b;
+  --color-surface-overlay: #161c25;
+  --color-surface-border: rgba(125, 155, 205, 0.1);
+  --color-surface-border-strong: rgba(125, 155, 205, 0.2);
+
+  --color-text-primary: #e6edfa;
+  --color-text-muted: #8d9fbc;
+  --color-text-faint: #566480;
+  --color-text-ghost: #33404f;
+
+  --color-amber: #f2a93b;
+  --color-amber-bg: rgba(242, 169, 59, 0.09);
+  --color-amber-border: rgba(242, 169, 59, 0.32);
+  --color-green: #22d97c;
+  --color-green-bg: rgba(34, 217, 124, 0.09);
+  --color-green-border: rgba(34, 217, 124, 0.32);
+  --color-red: #ef3b57;
+  --color-red-bg: rgba(239, 59, 87, 0.09);
+  --color-red-border: rgba(239, 59, 87, 0.34);
+  --color-blue: #4f8cff;
+  --color-blue-bg: rgba(79, 140, 255, 0.09);
+  --color-blue-border: rgba(79, 140, 255, 0.32);
+
+  /* Accent kept as an alias so pre-pivot components (Button "primary" etc.)
+     still resolve — points at green, the mockup's affirmative color. */
+  --color-accent: #22d97c;
+  --color-accent-muted: #1ab569;
+
+  /* Semantic tokens used by existing components — mapped onto the new
+     palette rather than renamed everywhere. */
+  --color-pnl-positive: #22d97c;
+  --color-pnl-negative: #ef3b57;
+  --color-pnl-neutral: #8d9fbc;
+
+  --color-regime-bull: #22d97c;
+  --color-regime-bear: #ef3b57;
+  --color-regime-range: #f2a93b;
+  --color-regime-crisis: #ef3b57;
+  --color-regime-recovery: #4f8cff;
+
+  --color-decision-allow: #22d97c;
+  --color-decision-block: #ef3b57;
+  --color-decision-wait: #f2a93b;
+  --color-decision-reduce: #f2a93b;
+
+  --color-severity-p1: #ef3b57;
+  --color-severity-p2: #f2a93b;
+  --color-severity-p3: #f2a93b;
+  --color-severity-p4: #4f8cff;
+
+  --color-dq-pass: #22d97c;
+  --color-dq-flag: #f2a93b;
+  --color-dq-reject: #ef3b57;
+
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-ui: "Syne", sans-serif;
+  --font-cond: "Barlow Condensed", sans-serif;
+
+  --nav-h: 58px;
+  --side-w: 200px;
+  --radius-app: 10px;
+}
+
+html {
+  color-scheme: dark;
+  font-size: 15px;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Faint scanline texture from the mockup — kept subtle, not decorative noise */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 41px, rgba(125, 155, 205, 0.014) 42px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}

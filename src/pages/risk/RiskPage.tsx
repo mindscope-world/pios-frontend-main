@@ -1,0 +1,177 @@
+import { useQuery } from "@tanstack/react-query";
+import { getRiskMetrics, getKillSwitchHistory } from "../../api/risk";
+import { getBehaviorSession } from "../../api/behavior";
+import { NullableNumber } from "../../components/ui/NullableNumber";
+import { useAuthStore } from "../../stores/authStore";
+
+const STATUS_TONE: Record<string, string> = {
+  OPTIMAL: "text-green",
+  NORMAL: "text-green",
+  WARNING: "text-amber",
+  LOCKED: "text-red",
+};
+
+export default function RiskPage() {
+  const isAdmin = useAuthStore((s) => s.user?.role === "admin");
+  const metrics = useQuery({ queryKey: ["risk-metrics"], queryFn: getRiskMetrics, staleTime: 20000 });
+  const behavior = useQuery({ queryKey: ["behavior-session"], queryFn: getBehaviorSession, staleTime: 20000 });
+  // GET /risk/killswitch/history is require_admin server-side — only fetch
+  // for admins to avoid a guaranteed 403 for everyone else.
+  const killLog = useQuery({ queryKey: ["kill-switch-history"], queryFn: getKillSwitchHistory, staleTime: 15000, enabled: isAdmin });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="VaR 95%" value={metrics.data?.var95 ?? null} />
+        <Stat label="Drawdown / Limit" value={metrics.data?.drawdown_current ?? null} suffix={metrics.data ? `% / ${metrics.data.drawdown_limit}%` : ""} />
+        <Stat label="Leverage" value={metrics.data?.leverage ?? null} />
+        <Stat label="Daily Loss / Limit" value={metrics.data?.daily_loss ?? null} suffix={metrics.data ? ` / ${metrics.data.daily_loss_limit}` : ""} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+          <div className="border-b border-surface-border px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
+            System status
+          </div>
+          <div className="p-4">
+            <Row label="Kill switch" value={metrics.data ? (metrics.data.kill_switch_armed ? "Armed" : "Not armed") : "—"} tone={metrics.data?.kill_switch_armed ? "pos" : "neg"} />
+            <Row label="Triggers today" value={metrics.data ? String(metrics.data.triggers_today) : "—"} last />
+            <p className="mt-3 text-[10.5px] leading-relaxed text-text-faint">
+              The kill control lives in the topbar (hold to arm, then confirm) and fires a real one-shot cancel-all /
+              close-all action — there is no separate paused/defensive server state to resume from today.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+          <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+            <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Trader state</span>
+            <span className="text-[10px] text-text-faint">Self-calibration, not review</span>
+          </div>
+          <div className="p-4">
+            {behavior.data ? (
+              <>
+                <TraderBar label="Discipline" value={`${behavior.data.score}%`} pct={behavior.data.score} tone={STATUS_TONE[behavior.data.status]} />
+                <TraderBar
+                  label="Session status"
+                  value={behavior.data.status}
+                  pct={behavior.data.score}
+                  tone={STATUS_TONE[behavior.data.status]}
+                />
+                <TraderBar
+                  label="Overtrading (freq vs. baseline)"
+                  value={`${behavior.data.trade_frequency_vs_baseline.toFixed(2)}×`}
+                  pct={Math.min(100, behavior.data.trade_frequency_vs_baseline * 40)}
+                  tone={behavior.data.trade_frequency_vs_baseline > 1.5 ? "text-amber" : "text-green"}
+                />
+                <TraderBar
+                  label="Override pattern"
+                  value={`${behavior.data.overrides_this_hour}/hr · max ${behavior.data.override_max_per_hour}`}
+                  pct={Math.min(100, (behavior.data.overrides_this_hour / behavior.data.override_max_per_hour) * 100)}
+                  tone={behavior.data.overrides_this_hour > behavior.data.override_max_per_hour / 2 ? "text-amber" : "text-green"}
+                />
+                <TraderBar
+                  label="Emotional pressure"
+                  value={`${(behavior.data.emotional_score * 100).toFixed(0)}%`}
+                  pct={behavior.data.emotional_score * 100}
+                  tone={behavior.data.emotional_score > 0.5 ? "text-amber" : "text-green"}
+                  last
+                />
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-[11px] text-blue">What does this track?</summary>
+                  <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
+                    These signals are derived from your order history — override/reversal rate, trade frequency vs.
+                    your own rolling baseline, and a composite emotional-pressure score. Nothing here changes how the
+                    system trades, and it is not shared externally.
+                  </p>
+                </details>
+              </>
+            ) : (
+              <p className="text-sm text-text-muted">Loading…</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+        <div className="border-b border-surface-border px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
+          Kill log
+        </div>
+        {!isAdmin ? (
+          <p className="p-4 text-sm text-text-muted">Visible to admins only.</p>
+        ) : !killLog.data || killLog.data.length === 0 ? (
+          <p className="p-4 text-sm text-text-muted">No kill switch events yet.</p>
+        ) : (
+          <table className="w-full text-[11.5px]">
+            <thead>
+              <tr className="bg-surface-card text-[9.5px] uppercase tracking-[.06em] text-text-faint">
+                <th className="px-2.5 py-2 text-left">Time</th>
+                <th className="px-2.5 py-2 text-left">Trigger</th>
+                <th className="px-2.5 py-2 text-left">Reason</th>
+                <th className="px-2.5 py-2 text-left">Cancelled / Closed</th>
+                <th className="px-2.5 py-2 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {killLog.data.map((k) => (
+                <tr key={k.id} className="border-b border-surface-border last:border-0">
+                  <td className="px-2.5 py-2.5">{new Date(k.created_at).toUTCString().slice(17, 22)} UTC</td>
+                  <td className="px-2.5 py-2.5">
+                    <span className="rounded-md border border-blue-border bg-blue-bg px-2 py-0.5 text-[10px] font-bold text-blue">{k.trigger_source}</span>
+                  </td>
+                  <td className="px-2.5 py-2.5">{k.reason}</td>
+                  <td className="px-2.5 py-2.5">
+                    {k.orders_cancelled} / {k.positions_closed}
+                  </td>
+                  <td className="px-2.5 py-2.5">{k.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="rounded-[10px] border border-surface-border bg-surface-raised p-4 text-[11.5px] leading-relaxed text-text-faint">
+        Alerts live in the bell icon at the top of every screen, so they're visible no matter where you are, not just
+        here. Critical events also interrupt with a banner; everything else stays a passive count until you choose to
+        look.
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, suffix = "" }: { label: string; value: number | null; suffix?: string }) {
+  return (
+    <div className="rounded-lg border border-surface-border bg-surface-card p-3">
+      <p className="text-xs text-text-muted">{label}</p>
+      <p className="font-mono text-lg text-text-primary">
+        <NullableNumber value={value} />
+        {suffix}
+      </p>
+    </div>
+  );
+}
+
+function Row({ label, value, tone, last }: { label: string; value: string; tone?: "pos" | "neg"; last?: boolean }) {
+  const toneClass = tone === "pos" ? "text-green" : tone === "neg" ? "text-red" : "text-text-primary";
+  return (
+    <div className={`flex justify-between py-1.5 text-[11.5px] ${last ? "" : "border-b border-surface-border"}`}>
+      <span className="text-text-faint">{label}</span>
+      <span className={`font-semibold ${toneClass}`}>{value}</span>
+    </div>
+  );
+}
+
+function TraderBar({ label, value, pct, tone, last }: { label: string; value: string; pct: number; tone: string; last?: boolean }) {
+  return (
+    <div className={last ? "" : "mb-3"}>
+      <div className="mb-1 flex justify-between text-[11px]">
+        <span className="text-text-faint">{label}</span>
+        <span className={`font-bold ${tone}`}>{value}</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-surface-overlay">
+        <div className={`h-full rounded-full ${tone.replace("text-", "bg-")}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+      </div>
+    </div>
+  );
+}
