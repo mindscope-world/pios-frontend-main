@@ -1,7 +1,28 @@
-import { getTraces, getWhyNotTrade, isNoMarketData, isNotYetComputed } from "../../api/intelligence";
+import { useQuery } from "@tanstack/react-query";
+import { getDecisionCurrent, getTraces, getWhyNotTrade, isNoMarketData, isNotYetComputed } from "../../api/intelligence";
 import { useCachedIntelligence } from "../../api/useIntelligence";
 import { IntelligenceEmptyState } from "../ui/IntelligenceEmptyState";
 import { Row } from "./shared";
+
+// Verified against decision_service.py's compute_decision_current() — live,
+// per-request, real authenticated user (unlike /intelligence/decision/feed,
+// which reads a worker-cache key computed for a hardcoded system user and is
+// deliberately NOT wired here — see roadmap-development-progress.md).
+interface DecisionCurrentPayload {
+  symbol: string;
+  strategy_name: string;
+  decision: "ALLOW" | "BLOCK" | "WAIT" | "REDUCE";
+  final_size_lot: number;
+  base_size_lot: number;
+  confidence: number;
+  confidence_low: number;
+  confidence_high: number;
+  signal_conflict: string;
+  execution_path: string;
+  risk_state: string;
+  behavior_score: number;
+  portfolio: { total_equity: number; total_exposure: number; exposure_pct: number; open_positions: number };
+}
 
 interface DecisionTrace {
   id: string;
@@ -53,6 +74,13 @@ const DECISION_TAG: Record<string, string> = {
 export function OverviewTab({ symbol }: { symbol: string }) {
   const traces = useCachedIntelligence(["traces", symbol], () => getTraces(symbol));
   const whyNotTrade = useCachedIntelligence(["why-not-trade", symbol], () => getWhyNotTrade(symbol));
+  const decisionCurrent = useQuery({
+    queryKey: ["decision-current", symbol],
+    queryFn: () => getDecisionCurrent(symbol) as unknown as Promise<DecisionCurrentPayload>,
+    staleTime: 20000,
+    refetchOnWindowFocus: false,
+  });
+  const dc = decisionCurrent.data && !(decisionCurrent.data as { error?: string }).error ? decisionCurrent.data : null;
 
   const traceList: DecisionTrace[] =
     traces.data && !isNotYetComputed(traces.data) && !isNoMarketData(traces.data)
@@ -150,6 +178,38 @@ export function OverviewTab({ symbol }: { symbol: string }) {
               </>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+          <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Live decision pipeline · {symbol}</span>
+          {dc && <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${DECISION_TAG[dc.decision]}`}>{dc.decision}</span>}
+        </div>
+        <div className="p-4">
+          {decisionCurrent.isPending ? (
+            <p className="text-sm text-text-muted">Loading…</p>
+          ) : !dc ? (
+            <p className="text-sm text-text-muted">Live decision pipeline unavailable for {symbol} right now.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-x-6 lg:grid-cols-2">
+              <div>
+                <Row label="Strategy" value={dc.strategy_name} />
+                <Row label="Size (final / base)" value={`${dc.final_size_lot} / ${dc.base_size_lot} lot`} />
+                <Row label="Confidence" value={`${dc.confidence}% (${dc.confidence_low}–${dc.confidence_high}%)`} />
+                <Row label="Signal conflict" value={dc.signal_conflict} />
+                <Row label="Risk state" value={dc.risk_state} last />
+              </div>
+              <div>
+                <Row label="Behavior score" value={`${dc.behavior_score}%`} />
+                <Row label="Portfolio equity" value={`$${dc.portfolio.total_equity.toLocaleString()}`} />
+                <Row label="Exposure" value={`${dc.portfolio.exposure_pct}% · ${dc.portfolio.open_positions} open`} last />
+              </div>
+              <p className="col-span-full mt-2 rounded-md border border-surface-border bg-surface-card p-2.5 font-mono text-[10.5px] text-text-faint">
+                {dc.execution_path}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

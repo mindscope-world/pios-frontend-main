@@ -1,6 +1,21 @@
-import { getGmigRadar, getGmigSnapshot, isNoMarketData, isNotYetComputed } from "../../api/intelligence";
+import { useQuery } from "@tanstack/react-query";
+import { getGmigEnhanced, getGmigRadar, getGmigSnapshot, isNoMarketData, isNotYetComputed } from "../../api/intelligence";
 import { useCachedIntelligence } from "../../api/useIntelligence";
 import { Card, Loading, Pill, Row } from "./shared";
+
+// Verified against cross_market_service.py's compute_gmig_enhanced() — a
+// distinct feature from snapshot/radar, not just a fresher duplicate: it
+// pulls live cross-market prices (OANDA) and a real graph (build_gmig_graph),
+// with node/edge counts snapshot/radar don't expose.
+interface GmigEnhancedPayload {
+  live_prices: Record<string, number>;
+  relationships: { assets?: string; size_modifier_pct?: number }[];
+  gnn_confidence: number;
+  graph_nodes: number;
+  graph_edges: number;
+  modifiers: { symbol: string; modifier: number; live_price: number | null }[];
+  evaluated_at: string;
+}
 
 // Verified against app/services/intelligence/cross_market_service.py's
 // compute_gmig_snapshot() / compute_gmig_radar(). Both only look at
@@ -45,6 +60,15 @@ const DIRECTION_TONE: Record<string, "green" | "red" | "amber" | "neutral"> = {
 export function GmigTab({ symbol }: { symbol: string }) {
   const snapshot = useCachedIntelligence(["gmig-snapshot", symbol], () => getGmigSnapshot(symbol));
   const radar = useCachedIntelligence(["gmig-radar", symbol], () => getGmigRadar(symbol));
+  // No symbol param — compute_gmig_enhanced always scans the same active
+  // forex universe regardless of the selected primary symbol.
+  const enhanced = useQuery({
+    queryKey: ["gmig-enhanced"],
+    queryFn: () => getGmigEnhanced() as unknown as Promise<GmigEnhancedPayload>,
+    staleTime: 20000,
+    refetchOnWindowFocus: false,
+  });
+  const e = enhanced.data ?? null;
 
   const s =
     snapshot.data && !isNotYetComputed(snapshot.data) && !isNoMarketData(snapshot.data)
@@ -138,6 +162,54 @@ export function GmigTab({ symbol }: { symbol: string }) {
           )}
         </Card>
       </div>
+
+      <Card
+        title="Live cross-market graph (enhanced)"
+        right={e && <Pill tone="blue">{e.graph_nodes} nodes · {e.graph_edges} edges</Pill>}
+      >
+        {enhanced.isPending ? (
+          <Loading />
+        ) : !e ? (
+          <p className="text-sm text-text-muted">Live cross-market graph unavailable right now.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div>
+              <Row label="GNN confidence" value={`${(e.gnn_confidence * 100).toFixed(0)}%`} />
+              <Row label="Relationships tracked" value={e.relationships.length} last />
+              <p className="mt-2 text-[11px] text-text-faint">
+                Live prices pulled from OANDA across the same forex universe as the snapshot above, feeding a real
+                correlation graph rather than the cached 200-tick snapshot.
+              </p>
+            </div>
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="text-[9.5px] uppercase tracking-[.06em] text-text-faint">
+                  <th className="py-1 text-left">Symbol</th>
+                  <th className="py-1 text-left">Modifier</th>
+                  <th className="py-1 text-left">Live price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {e.modifiers.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="py-2 text-text-muted">
+                      No live modifiers available.
+                    </td>
+                  </tr>
+                ) : (
+                  e.modifiers.map((m) => (
+                    <tr key={m.symbol} className="border-t border-surface-border">
+                      <td className="py-1.5 font-semibold text-text-primary">{m.symbol}</td>
+                      <td className="py-1.5 font-mono">×{m.modifier}</td>
+                      <td className="py-1.5 font-mono">{m.live_price != null ? m.live_price.toLocaleString() : "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

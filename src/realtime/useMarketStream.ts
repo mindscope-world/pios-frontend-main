@@ -27,7 +27,7 @@ export interface MarketAnalyticsEvent {
   macd_cross: string | null;
   bb_signal: string | null;
   composite_bias: string | null;
-  composite_signal: string | null;
+  composite_signal: number | null;
   signal_conflict: string;
   ts: string;
 }

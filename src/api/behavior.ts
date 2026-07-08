@@ -19,3 +19,29 @@ export interface BehaviorSession {
 export function getBehaviorSession() {
   return apiFetch<BehaviorSession>("/behavior/session");
 }
+
+export interface BehaviorOverrideItem {
+  id: string;
+  occurred_at: string;
+  ai_signal: "ALLOW" | "BLOCK";
+  trader_action: "EXECUTED" | "CANCELLED MANUALLY" | "ATTEMPTED OVERRIDE";
+  outcome_pnl: number;
+  impact: "GOOD" | "POOR" | "BAD";
+}
+
+// GET /behavior/overrides returns {"items": [...]}, capped at 50 rows server-side.
+export function getBehaviorOverrides(hours = 24) {
+  return apiFetch<{ items: BehaviorOverrideItem[] }>(`/behavior/overrides?hours=${hours}`);
+}
+
+export interface BehaviorTrendPoint {
+  ts: string;
+  score: number;
+  override_count: number;
+}
+
+// GET /behavior/trend returns a bare array (one point per hour in the window),
+// not the {items: [...]} shape /overrides uses — mirrors behavior.py exactly.
+export function getBehaviorTrend(hours = 24) {
+  return apiFetch<BehaviorTrendPoint[]>(`/behavior/trend?hours=${hours}`);
+}

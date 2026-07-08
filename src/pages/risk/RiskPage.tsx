@@ -1,9 +1,19 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getRiskMetrics, getKillSwitchHistory } from "../../api/risk";
-import { getBehaviorSession } from "../../api/behavior";
+import { getBehaviorSession, getBehaviorOverrides, getBehaviorTrend } from "../../api/behavior";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { RiskLimitsAdmin } from "../../components/risk/RiskLimitsAdmin";
 import { useAuthStore } from "../../stores/authStore";
+
+const HOURS_OPTIONS = [24, 72, 168] as const;
+
+const IMPACT_TONE: Record<string, string> = {
+  GOOD: "text-green",
+  POOR: "text-amber",
+  BAD: "text-red",
+};
 
 const STATUS_TONE: Record<string, string> = {
   OPTIMAL: "text-green",
@@ -16,6 +26,9 @@ export default function RiskPage() {
   const isAdmin = useAuthStore((s) => s.user?.role === "admin");
   const metrics = useQuery({ queryKey: ["risk-metrics"], queryFn: getRiskMetrics, staleTime: 20000 });
   const behavior = useQuery({ queryKey: ["behavior-session"], queryFn: getBehaviorSession, staleTime: 20000 });
+  const [behaviorHours, setBehaviorHours] = useState<(typeof HOURS_OPTIONS)[number]>(24);
+  const behaviorTrend = useQuery({ queryKey: ["behavior-trend", behaviorHours], queryFn: () => getBehaviorTrend(behaviorHours), staleTime: 30000 });
+  const behaviorOverrides = useQuery({ queryKey: ["behavior-overrides", behaviorHours], queryFn: () => getBehaviorOverrides(behaviorHours), staleTime: 30000 });
   // GET /risk/killswitch/history is require_admin server-side — only fetch
   // for admins to avoid a guaranteed 403 for everyone else.
   const killLog = useQuery({ queryKey: ["kill-switch-history"], queryFn: getKillSwitchHistory, staleTime: 15000, enabled: isAdmin });
@@ -91,6 +104,90 @@ export default function RiskPage() {
               <p className="text-sm text-text-muted">Loading…</p>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border px-4 py-3">
+          <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Behavior history</span>
+          <div className="flex gap-1.5">
+            {HOURS_OPTIONS.map((h) => (
+              <button
+                key={h}
+                onClick={() => setBehaviorHours(h)}
+                className={`rounded-md border px-2.5 py-1 text-[10.5px] font-semibold ${
+                  behaviorHours === h ? "border-blue-border bg-blue-bg text-blue" : "border-surface-border-strong text-text-faint"
+                }`}
+              >
+                {h}h
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="h-[160px] p-3.5">
+          {behaviorTrend.data && behaviorTrend.data.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={behaviorTrend.data}>
+                <defs>
+                  <linearGradient id="behaviorScoreFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3ba25f" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#3ba25f" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="ts"
+                  tick={{ fontSize: 10, fill: "#8d9fbc" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(ts: string) => new Date(ts).toUTCString().slice(17, 22)}
+                />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#8d9fbc" }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ background: "#10141b", border: "1px solid rgba(125,155,205,.2)", fontSize: 11 }}
+                  labelFormatter={(ts) => new Date(String(ts)).toUTCString().slice(0, 22)}
+                  formatter={(value) => [value, "Score"]}
+                />
+                <Area type="monotone" dataKey="score" stroke="#3ba25f" strokeWidth={2} fill="url(#behaviorScoreFill)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-text-muted">No behavior history yet.</p>
+          )}
+        </div>
+        <div className="border-t border-surface-border">
+          {!behaviorOverrides.data || behaviorOverrides.data.items.length === 0 ? (
+            <p className="p-4 text-sm text-text-muted">No overrides in this window.</p>
+          ) : (
+            <table className="w-full text-[11.5px]">
+              <thead>
+                <tr className="bg-surface-card text-[9.5px] uppercase tracking-[.06em] text-text-faint">
+                  <th className="px-2.5 py-2 text-left">Time</th>
+                  <th className="px-2.5 py-2 text-left">AI signal</th>
+                  <th className="px-2.5 py-2 text-left">Trader action</th>
+                  <th className="px-2.5 py-2 text-left">Outcome P&amp;L</th>
+                  <th className="px-2.5 py-2 text-left">Impact</th>
+                </tr>
+              </thead>
+              <tbody>
+                {behaviorOverrides.data.items.map((o) => (
+                  <tr key={o.id} className="border-b border-surface-border last:border-0">
+                    <td className="px-2.5 py-2.5">{new Date(o.occurred_at).toUTCString().slice(17, 22)} UTC</td>
+                    <td className="px-2.5 py-2.5">
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${o.ai_signal === "ALLOW" ? "border-green-border bg-green-bg text-green" : "border-red-border bg-red-bg text-red"}`}>
+                        {o.ai_signal}
+                      </span>
+                    </td>
+                    <td className="px-2.5 py-2.5">{o.trader_action}</td>
+                    <td className={`px-2.5 py-2.5 font-semibold ${o.outcome_pnl >= 0 ? "text-green" : "text-red"}`}>
+                      {o.outcome_pnl >= 0 ? "+" : ""}
+                      {o.outcome_pnl.toFixed(2)}
+                    </td>
+                    <td className={`px-2.5 py-2.5 font-semibold ${IMPACT_TONE[o.impact]}`}>{o.impact}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 

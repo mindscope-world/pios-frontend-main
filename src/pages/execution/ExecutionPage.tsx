@@ -14,7 +14,7 @@ import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptySta
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { ModeActions } from "../../components/execution/ModeActions";
 import { useChannelSocket } from "../../realtime/useChannelSocket";
-import { useMarketStream, type MarketPriceEvent } from "../../realtime/useMarketStream";
+import { useMarketStream, type MarketAnalyticsEvent, type MarketPriceEvent } from "../../realtime/useMarketStream";
 
 const SYMBOLS = ["BTC/USDT", "EUR/USD", "XAU/USD"];
 
@@ -89,11 +89,27 @@ export default function ExecutionPage() {
   // SSE live price ticker (/intelligence/stream) — independent of the
   // worker-cache above, updates on every tick rather than the ~4s poll.
   const [livePrice, setLivePrice] = useState<MarketPriceEvent | null>(null);
-  useEffect(() => setLivePrice(null), [symbol]);
+  // Live technicals strip, additive-only: this is new UI, not a replacement
+  // for any REST-sourced field, so there's no cache to clobber (unlike the
+  // stream's why_not_trade sub-feed, which runs an independent regime
+  // heuristic over the globally busiest symbols rather than the requested
+  // one — deliberately NOT wired into the why-not-trade card below, which
+  // stays sourced from getWhyNotTrade(symbol) only).
+  const [analytics, setAnalytics] = useState<MarketAnalyticsEvent | null>(null);
+  const [lastHeartbeatAt, setLastHeartbeatAt] = useState<string | null>(null);
+  useEffect(() => {
+    setLivePrice(null);
+    setAnalytics(null);
+    setLastHeartbeatAt(null);
+  }, [symbol]);
   useMarketStream([symbol], {
     onPrice: (data) => {
       if (normalizeSym(data.symbol) === normalizeSym(symbol)) setLivePrice(data);
     },
+    onAnalytics: (data) => {
+      if (normalizeSym(data.symbol) === normalizeSym(symbol)) setAnalytics(data);
+    },
+    onHeartbeat: () => setLastHeartbeatAt(new Date().toLocaleTimeString("en-US", { hour12: false })),
   });
 
   const cc = commandCenter.data && !isNotYetComputed(commandCenter.data) && !isNoMarketData(commandCenter.data)
@@ -147,8 +163,13 @@ export default function ExecutionPage() {
         <div className="rounded-[10px] border border-surface-border bg-surface-raised">
           <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
             <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">{symbol} · live</span>
-            <span className="text-[10.5px] text-text-faint">
-              Weighted mid {orderbook.data?.weighted_mid != null ? orderbook.data.weighted_mid.toLocaleString() : "—"}
+            <span className="flex items-center gap-3 text-[10.5px] text-text-faint">
+              <span>Weighted mid {orderbook.data?.weighted_mid != null ? orderbook.data.weighted_mid.toLocaleString() : "—"}</span>
+              {lastHeartbeatAt && (
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green" /> stream {lastHeartbeatAt}
+                </span>
+              )}
             </span>
           </div>
           <div className="p-3.5">
@@ -182,6 +203,24 @@ export default function ExecutionPage() {
               <IntelligenceEmptyState reason="no_market_data" />
             )}
           </div>
+          {analytics && (
+            <div className="flex flex-wrap gap-1.5 border-t border-surface-border px-4 py-2.5">
+              <AnalyticsChip label={analytics.regime} sub={`${analytics.regime_conf}%`} />
+              {analytics.rsi_14 != null && <AnalyticsChip label={`RSI ${analytics.rsi_14.toFixed(1)}`} sub={analytics.rsi_signal ?? undefined} />}
+              {analytics.macd_cross && <AnalyticsChip label={`MACD ${analytics.macd_cross}`} />}
+              {analytics.bb_signal && <AnalyticsChip label={`BB ${analytics.bb_signal}`} />}
+              {analytics.composite_bias && (
+                <AnalyticsChip
+                  label={analytics.composite_bias}
+                  sub={analytics.composite_signal != null ? analytics.composite_signal.toFixed(2) : undefined}
+                  tone={analytics.composite_bias.includes("BULL") ? "green" : analytics.composite_bias.includes("BEAR") ? "red" : undefined}
+                />
+              )}
+              {analytics.signal_conflict && analytics.signal_conflict !== "NONE" && (
+                <AnalyticsChip label={`conflict: ${analytics.signal_conflict}`} tone="amber" />
+              )}
+            </div>
+          )}
           {(orderbook.data?.asks ?? []).slice(0, 2).reverse().map(([px, sz], i) => (
             <div key={`ask-${i}`} className="flex justify-between border-t border-surface-border px-4 py-1.5 text-[11px]">
               <span className="font-bold text-red">{px.toLocaleString()}</span>
@@ -267,6 +306,16 @@ function RegimeCell({ label, value, sub, tone }: { label: string; value: string;
       <div className={`text-[13px] font-bold ${toneClass}`}>{value}</div>
       {sub && <div className="mt-0.5 text-[9.5px] text-text-faint">{sub}</div>}
     </div>
+  );
+}
+
+function AnalyticsChip({ label, sub, tone }: { label: string; sub?: string; tone?: "green" | "red" | "amber" }) {
+  const toneClass = tone === "green" ? "border-green-border bg-green-bg text-green" : tone === "red" ? "border-red-border bg-red-bg text-red" : tone === "amber" ? "border-amber-border bg-amber-bg text-amber" : "border-surface-border-strong text-text-faint";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${toneClass}`}>
+      {label}
+      {sub && <span className="font-normal opacity-70">· {sub}</span>}
+    </span>
   );
 }
 
