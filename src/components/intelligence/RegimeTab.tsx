@@ -51,9 +51,10 @@ const REGIME_TONE: Record<string, "green" | "red" | "amber" | "blue" | "neutral"
   RECOVERY: "blue",
 };
 
-export function RegimeTab({ symbol }: { symbol: string }) {
-  const current = useCachedIntelligence(["regime-current", symbol], () => getRegimeCurrent(symbol));
-  const trend = useCachedIntelligence(["regime-trend", symbol], () => getRegimeTrend(symbol));
+export function RegimeTab({ symbol }: { symbol?: string }) {
+  const label = symbol ?? "auto";
+  const current = useCachedIntelligence(["regime-current", label], () => getRegimeCurrent(symbol));
+  const trend = useCachedIntelligence(["regime-trend", label], () => getRegimeTrend(symbol));
 
   // compute_regime_current() has a THIRD error shape beyond the standard
   // not_yet_computed/no_market_data pair — {"error":"no_regime_data",...}
@@ -73,14 +74,14 @@ export function RegimeTab({ symbol }: { symbol: string }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card
-        title={`Regime · ${symbol}`}
+        title={`Regime · ${label}`}
         right={r && <Pill tone={REGIME_TONE[r.regime] ?? "neutral"}>{r.regime}</Pill>}
       >
         {current.isPending ? (
           <Loading />
         ) : !r ? (
           hasCustomError ? (
-            <p className="text-sm text-text-muted">No HMM regime detection has run for {symbol} yet.</p>
+            <p className="text-sm text-text-muted">No HMM regime detection has run for {label} yet.</p>
           ) : (
             <IntelligenceEmptyState reason={current.data && isNotYetComputed(current.data) ? "not_yet_computed" : "no_market_data"} symbol={symbol} />
           )

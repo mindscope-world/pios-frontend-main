@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getMonteCarlo } from "../../api/intelligence";
+import { getMonteCarlo, getMonteCarloAuto } from "../../api/intelligence";
 import { Card, Loading, Pill, Row } from "./shared";
 
 // Verified against app/services/intelligence/montecarlo_service.py's
@@ -38,10 +38,13 @@ interface MonteCarloPayload {
 
 const CASE_TONE: Record<string, "green" | "amber" | "red"> = { BULL: "green", BASE: "amber", BEAR: "red" };
 
-export function MonteCarloTab({ symbol }: { symbol: string }) {
+export function MonteCarloTab({ symbol }: { symbol?: string }) {
+  const label = symbol ?? "auto";
   const mc = useQuery({
-    queryKey: ["monte-carlo", symbol],
-    queryFn: () => getMonteCarlo({ symbol }) as unknown as Promise<MonteCarloPayload>,
+    queryKey: ["monte-carlo", label],
+    // AUTO mode uses the dedicated /montecarlo/auto route (backend detects
+    // the primary symbol); same payload shape either way.
+    queryFn: () => (symbol ? getMonteCarlo({ symbol }) : getMonteCarloAuto()) as unknown as Promise<MonteCarloPayload>,
     staleTime: 30000,
     refetchOnWindowFocus: false,
   });
@@ -50,13 +53,13 @@ export function MonteCarloTab({ symbol }: { symbol: string }) {
 
   return (
     <div className="space-y-4">
-      <Card title={`Monte Carlo · ${symbol}`} right={m && <Pill tone="blue">{m.sim_count} sims · {m.horizon_days}d</Pill>}>
+      <Card title={`Monte Carlo · ${m?.symbol ?? label}`} right={m && <Pill tone="blue">{m.sim_count} sims · {m.horizon_days}d</Pill>}>
         {mc.isPending ? (
           <Loading />
         ) : !m ? (
           <p className="text-sm text-text-muted">
-            {mc.data?.error === "insufficient_tick_data"
-              ? `Not enough tick history for ${symbol} yet.`
+            {mc.data?.error === "insufficient_tick_data" || mc.data?.error === "insufficient_price_data"
+              ? `Not enough tick history for ${mc.data?.symbol ?? label} yet.`
               : mc.data?.error === "no_primary_symbol"
                 ? "No primary symbol configured."
                 : "Monte Carlo simulation unavailable."}

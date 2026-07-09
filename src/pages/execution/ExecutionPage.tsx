@@ -9,12 +9,18 @@ import {
   isNotYetComputed,
 } from "../../api/intelligence";
 import { useCachedIntelligence } from "../../api/useIntelligence";
+import { getTickerSnapshots } from "../../api/market";
 import { getPortfolioMetrics, listPositions } from "../../api/positions";
 import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptyState";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { ModeActions } from "../../components/execution/ModeActions";
 import { useChannelSocket } from "../../realtime/useChannelSocket";
-import { useMarketStream, type MarketAnalyticsEvent, type MarketPriceEvent } from "../../realtime/useMarketStream";
+import {
+  useMarketStream,
+  type MarketAnalyticsEvent,
+  type MarketPriceEvent,
+  type MarketWhyNotTradeEvent,
+} from "../../realtime/useMarketStream";
 
 const SYMBOLS = ["BTC/USDT", "EUR/USD", "XAU/USD"];
 
@@ -67,6 +73,18 @@ export default function ExecutionPage() {
   const portfolioMetrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000, refetchInterval: 20000 });
   const positions = useQuery({ queryKey: ["positions"], queryFn: listPositions, staleTime: 15000, refetchInterval: 15000 });
 
+  // GET /market/tickers — DB-persisted last price + change per symbol,
+  // decorating the symbol switcher ("Powers TopBar" per the endpoint's own
+  // docstring). Distinct from the SSE live ticker, which only covers the
+  // currently selected symbol.
+  const tickerSnapshots = useQuery({
+    queryKey: ["ticker-snapshots"],
+    queryFn: () => getTickerSnapshots(SYMBOLS),
+    staleTime: 10000,
+    refetchInterval: 10000,
+  });
+  const snapshotFor = (s: string) => tickerSnapshots.data?.find((t) => t.symbol === s);
+
   // Live push on top of the 4s poll above — /api/v1/ws's "command_center"
   // channel is fed by the same system-computed snapshot the REST cache read
   // serves (app/api/v1/endpoints/intelligence.py's command-center/current
@@ -78,11 +96,21 @@ export default function ExecutionPage() {
   // two are NOT wired the same way — they're computed for a hardcoded
   // system user, not the logged-in trader).
   useChannelSocket("command_center", symbol, (msg) => {
-    // Untagged channel — this connection only subscribes to one channel per
-    // symbol today, but stay defensive per channelSocket.ts's own doc: only
+    // Untagged channel — stay defensive per channelSocket.ts's own doc: only
     // accept messages that actually look like a command-center payload.
     if (typeof msg.decision === "string" || "error" in msg) {
       queryClient.setQueryData(["command-center", symbol], msg);
+    }
+  });
+
+  // User-scoped push from the API process (app/services/trade_events.py):
+  // fills/cancels now net into *this trader's* Position rows server-side, so
+  // a positions event is a real signal to refetch, not the system-user
+  // snapshot the worker broadcasts on per-symbol buckets.
+  useChannelSocket("positions", undefined, (msg) => {
+    if (msg.event === "position_update") {
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-metrics"] });
     }
   });
 
@@ -97,10 +125,16 @@ export default function ExecutionPage() {
   // stays sourced from getWhyNotTrade(symbol) only).
   const [analytics, setAnalytics] = useState<MarketAnalyticsEvent | null>(null);
   const [lastHeartbeatAt, setLastHeartbeatAt] = useState<string | null>(null);
+  // The stream's why_not_trade sub-feed runs its own regime heuristic over
+  // the globally busiest symbols — NOT necessarily the selected one — so it
+  // renders as a clearly-labeled "stream pulse" chip carrying its own symbol,
+  // never merged into the per-symbol getWhyNotTrade(symbol) card below.
+  const [streamPulse, setStreamPulse] = useState<MarketWhyNotTradeEvent | null>(null);
   useEffect(() => {
     setLivePrice(null);
     setAnalytics(null);
     setLastHeartbeatAt(null);
+    setStreamPulse(null);
   }, [symbol]);
   useMarketStream([symbol], {
     onPrice: (data) => {
@@ -109,6 +143,7 @@ export default function ExecutionPage() {
     onAnalytics: (data) => {
       if (normalizeSym(data.symbol) === normalizeSym(symbol)) setAnalytics(data);
     },
+    onWhyNotTrade: (data) => setStreamPulse(data),
     onHeartbeat: () => setLastHeartbeatAt(new Date().toLocaleTimeString("en-US", { hour12: false })),
   });
 
@@ -123,17 +158,29 @@ export default function ExecutionPage() {
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div className="flex gap-1.5">
-          {SYMBOLS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setSymbol(s)}
-              className={`rounded-md border px-3.5 py-1.5 text-[11.5px] ${
-                s === symbol ? "border-blue-border bg-blue-bg font-bold text-blue" : "border-surface-border-strong text-text-faint"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+          {SYMBOLS.map((s) => {
+            const snap = snapshotFor(s);
+            return (
+              <button
+                key={s}
+                onClick={() => setSymbol(s)}
+                className={`rounded-md border px-3.5 py-1.5 text-[11.5px] ${
+                  s === symbol ? "border-blue-border bg-blue-bg font-bold text-blue" : "border-surface-border-strong text-text-faint"
+                }`}
+              >
+                {s}
+                {snap && (
+                  <span className="ml-1.5 font-mono text-[9.5px] font-normal">
+                    {snap.price.toLocaleString()}{" "}
+                    <span className={snap.change_pct >= 0 ? "text-green" : "text-red"}>
+                      {snap.change_pct >= 0 ? "+" : ""}
+                      {snap.change_pct}%
+                    </span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <div className="flex gap-5">
           <PerfItem label="Win rate" value={<NullableNumber value={portfolioMetrics.data?.win_rate ?? null} suffix="%" />} tone="green" />
@@ -203,21 +250,32 @@ export default function ExecutionPage() {
               <IntelligenceEmptyState reason="no_market_data" />
             )}
           </div>
-          {analytics && (
+          {(analytics || streamPulse) && (
             <div className="flex flex-wrap gap-1.5 border-t border-surface-border px-4 py-2.5">
-              <AnalyticsChip label={analytics.regime} sub={`${analytics.regime_conf}%`} />
-              {analytics.rsi_14 != null && <AnalyticsChip label={`RSI ${analytics.rsi_14.toFixed(1)}`} sub={analytics.rsi_signal ?? undefined} />}
-              {analytics.macd_cross && <AnalyticsChip label={`MACD ${analytics.macd_cross}`} />}
-              {analytics.bb_signal && <AnalyticsChip label={`BB ${analytics.bb_signal}`} />}
-              {analytics.composite_bias && (
-                <AnalyticsChip
-                  label={analytics.composite_bias}
-                  sub={analytics.composite_signal != null ? analytics.composite_signal.toFixed(2) : undefined}
-                  tone={analytics.composite_bias.includes("BULL") ? "green" : analytics.composite_bias.includes("BEAR") ? "red" : undefined}
-                />
+              {analytics && (
+                <>
+                  <AnalyticsChip label={analytics.regime} sub={`${analytics.regime_conf}%`} />
+                  {analytics.rsi_14 != null && <AnalyticsChip label={`RSI ${analytics.rsi_14.toFixed(1)}`} sub={analytics.rsi_signal ?? undefined} />}
+                  {analytics.macd_cross && <AnalyticsChip label={`MACD ${analytics.macd_cross}`} />}
+                  {analytics.bb_signal && <AnalyticsChip label={`BB ${analytics.bb_signal}`} />}
+                  {analytics.composite_bias && (
+                    <AnalyticsChip
+                      label={analytics.composite_bias}
+                      sub={analytics.composite_signal != null ? analytics.composite_signal.toFixed(2) : undefined}
+                      tone={analytics.composite_bias.includes("BULL") ? "green" : analytics.composite_bias.includes("BEAR") ? "red" : undefined}
+                    />
+                  )}
+                  {analytics.signal_conflict && analytics.signal_conflict !== "NONE" && (
+                    <AnalyticsChip label={`conflict: ${analytics.signal_conflict}`} tone="amber" />
+                  )}
+                </>
               )}
-              {analytics.signal_conflict && analytics.signal_conflict !== "NONE" && (
-                <AnalyticsChip label={`conflict: ${analytics.signal_conflict}`} tone="amber" />
+              {streamPulse && (
+                <AnalyticsChip
+                  label={`pulse ${streamPulse.symbol}: ${streamPulse.decision}`}
+                  sub={streamPulse.regime}
+                  tone={streamPulse.decision === "ALLOW" ? "green" : streamPulse.decision === "BLOCK" ? "red" : "amber"}
+                />
               )}
             </div>
           )}
@@ -253,7 +311,11 @@ export default function ExecutionPage() {
                   Concrete entry/stop/target/R:R levels aren't computed by the backend yet — this shows the real
                   ALLOW/BLOCK gate decision and sizing instead.
                 </p>
-                <ModeActions symbol={symbol} suggestedQty={cc.final_size_lot} />
+                <ModeActions
+                  symbol={symbol}
+                  suggestedQty={cc.final_size_lot}
+                  referencePrice={livePrice?.price ?? cc.live_market?.price ?? null}
+                />
               </>
             ) : commandCenter.isPending ? (
               <p className="text-sm text-text-muted">Loading…</p>

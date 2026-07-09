@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { acknowledgeAlert, acknowledgeAllAlerts, listAlerts } from "../../api/alerts";
 import type { AlertSeverity } from "../../api/types";
+import { useChannelSocket } from "../../realtime/useChannelSocket";
 
 const SEVERITY_OPTIONS: (AlertSeverity | "")[] = ["", "P1", "P2", "P3", "P4"];
 
@@ -30,8 +31,16 @@ export default function AlertsPage() {
         acked: acked === "" ? undefined : acked === "true",
       }),
     placeholderData: (prev) => prev,
-    // No push channel for alert state exists server-side — plain polling.
-    refetchInterval: 15000,
+    // Slow safety-net poll behind the "alerts" WS broadcast below.
+    refetchInterval: 60000,
+  });
+
+  // Alert rows are global (no user_id column), so the backend broadcasts
+  // "alerts" to every subscriber when one is created (trade_events.py).
+  useChannelSocket("alerts", undefined, (msg) => {
+    if (msg.event === "alert_created") {
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+    }
   });
 
   const ack = useMutation({

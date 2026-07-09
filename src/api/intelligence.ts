@@ -112,6 +112,44 @@ export const getMarketSnapshot = (params: { crypto?: string; forex?: string; sto
 export const getMarketFunding = (symbols?: string) =>
   apiFetch<Payload>(`/intelligence/market/funding${buildQuery({ symbols })}`);
 
+// GET /intelligence/rejection-stats — 24h count of the caller's REJECTED
+// orders grouped by reject_reason, plus P1/P2 risk-alert counts by category
+// appended as "Risk Alert: <category>" rows (intelligence.py:rejection_stats).
+export interface RejectionStat {
+  reason: string;
+  count_24h: number;
+}
+
+export const getRejectionStats = () => apiFetch<RejectionStat[]>("/intelligence/rejection-stats");
+
+// GET /intelligence/notifications/latest — polling snapshot of constraint
+// severity across the most active symbols (distinct from the SSE
+// /notifications/stream, which pushes events as they happen). Used to seed
+// the alert bell on mount so it isn't empty before the first stream event.
+export interface NotificationSnapshotItem {
+  symbol: string;
+  symbol_id: number;
+  asset_class: string;
+  exchange: string;
+  regime: string;
+  regime_conf: number;
+  decision: "ALLOW" | "WARN" | "BLOCK";
+  severity: "OK" | "WARN" | "BLOCK";
+  feed_age_ms: number;
+  tick_count: number;
+  evaluated_at: string;
+}
+
+export interface NotificationSnapshot {
+  notifications: NotificationSnapshotItem[];
+  has_blocks: boolean;
+  has_warns: boolean;
+  generated_at: string;
+}
+
+export const getNotificationsLatest = (limit = 10) =>
+  apiFetch<NotificationSnapshot>(`/intelligence/notifications/latest${buildQuery({ limit })}`);
+
 // The 8-gate Quant Core pipeline strip (FRONTEND_GUIDE.md §7 Command Center
 // row) — real, computed live, returns [] if there's no primary symbol yet.
 export interface QuantCoreGate {

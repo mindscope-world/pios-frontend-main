@@ -7,11 +7,16 @@ import { supportsLiveTrading, type BrokerType } from "../../api/types";
 const BROKER_TYPES: BrokerType[] = ["ALPACA", "BINANCE", "CCXT", "IBKR", "OANDA", "LMAX", "MT5", "CUSTOM"];
 
 /**
- * POST /brokers. Only ALPACA/BINANCE/CCXT have a real adapter
+ * POST /brokers. Only ALPACA/BINANCE/CCXT/MT5 have a real adapter
  * (app/services/broker_service.py ADAPTER_MAP) — every other broker_type
  * gets 422 UnsupportedBrokerError unless is_paper=true. Disable the live
  * toggle client-side for those types instead of letting the user hit that
  * 422 (FRONTEND_GUIDE.md §5).
+ *
+ * MT5 live trading additionally requires pairing an Expert Advisor to
+ * /ws/mt5/{broker_id} using this connection's "Passphrase" field as the
+ * bridge token -- creating the broker here doesn't establish that
+ * connection by itself.
  */
 export function BrokerFormModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -110,7 +115,13 @@ export function BrokerFormModal({ onClose }: { onClose: () => void }) {
             <LabeledInput label="API key" value={apiKey} onChange={setApiKey} type="password" />
             <LabeledInput label="API secret" value={apiSecret} onChange={setApiSecret} type="password" />
             <LabeledInput label="Account id" value={accountId} onChange={setAccountId} />
-            <LabeledInput label="Passphrase" value={passphrase} onChange={setPassphrase} type="password" />
+            <LabeledInput
+              label={brokerType === "MT5" ? "Passphrase (EA bridge token)" : "Passphrase"}
+              value={passphrase}
+              onChange={setPassphrase}
+              type="password"
+              placeholder={brokerType === "MT5" ? "Set your own EA pairing secret" : undefined}
+            />
             {brokerType === "IBKR" && (
               <>
                 <LabeledInput label="Host" value={host} onChange={setHost} placeholder="127.0.0.1" />

@@ -52,7 +52,7 @@ const STATUS_TONE: Record<string, "green" | "amber" | "red" | "blue" | "neutral"
   ERROR: "red",
 };
 
-export function AlphaDarwinTab({ symbol }: { symbol: string }) {
+export function AlphaDarwinTab({ symbol }: { symbol?: string }) {
   const state = useCachedIntelligence(["alpha-state", symbol], () => getAlphaState(symbol));
   const darwin = useCachedIntelligence(["alpha-darwin", symbol], () => getAlphaDarwin(symbol));
 

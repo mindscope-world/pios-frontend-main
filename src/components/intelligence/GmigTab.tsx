@@ -57,9 +57,10 @@ const DIRECTION_TONE: Record<string, "green" | "red" | "amber" | "neutral"> = {
   CAUTIONARY: "amber",
 };
 
-export function GmigTab({ symbol }: { symbol: string }) {
-  const snapshot = useCachedIntelligence(["gmig-snapshot", symbol], () => getGmigSnapshot(symbol));
-  const radar = useCachedIntelligence(["gmig-radar", symbol], () => getGmigRadar(symbol));
+export function GmigTab({ symbol }: { symbol?: string }) {
+  const label = symbol ?? "auto";
+  const snapshot = useCachedIntelligence(["gmig-snapshot", label], () => getGmigSnapshot(symbol));
+  const radar = useCachedIntelligence(["gmig-radar", label], () => getGmigRadar(symbol));
   // No symbol param — compute_gmig_enhanced always scans the same active
   // forex universe regardless of the selected primary symbol.
   const enhanced = useQuery({
@@ -135,7 +136,7 @@ export function GmigTab({ symbol }: { symbol: string }) {
           )}
         </Card>
 
-        <Card title={`Correlation radar · vs. ${symbol}`}>
+        <Card title={`Correlation radar · vs. ${label}`}>
           {radar.isPending ? (
             <Loading />
           ) : radarPoints.length === 0 ? (

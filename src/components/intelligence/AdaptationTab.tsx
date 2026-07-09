@@ -32,7 +32,7 @@ interface AdaptationDriftPoint {
 
 const DIRECTION_TONE: Record<string, "green" | "red" | "neutral"> = { UP: "green", DOWN: "red", NEUTRAL: "neutral" };
 
-export function AdaptationTab({ symbol }: { symbol: string }) {
+export function AdaptationTab({ symbol }: { symbol?: string }) {
   const feed = useCachedIntelligence(["adaptation-feed", symbol], () => getAdaptationFeed(symbol));
   const active = useCachedIntelligence(["adaptation-active", symbol], () => getAdaptationActive(symbol));
   const drift = useCachedIntelligence(["adaptation-drift", symbol], () => getAdaptationDrift(symbol));

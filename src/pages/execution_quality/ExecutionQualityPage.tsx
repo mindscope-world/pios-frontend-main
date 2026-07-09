@@ -6,8 +6,10 @@ import {
   getFeedLatencyChart,
   getSlippageChart,
   getTcaSummary,
+  getTicksBySymbolId,
   type FeedStatus,
 } from "../../api/execution_quality";
+import { listDQSymbols } from "../../api/data_quality";
 
 const HOURS_OPTIONS = [24, 72, 168] as const;
 
@@ -32,6 +34,18 @@ export default function ExecutionQualityPage() {
     queryKey: ["feed-latency-chart", expandedSymbol],
     queryFn: () => getFeedLatencyChart([expandedSymbol!]),
     enabled: !!expandedSymbol,
+    staleTime: 15000,
+  });
+
+  // GET /data/symbols covers the full active universe with numeric ids —
+  // the symbol→id map that makes /market/ticks/{symbol_id} usable from here.
+  const symbols = useQuery({ queryKey: ["dq-symbols"], queryFn: () => listDQSymbols(), staleTime: 300000 });
+  const expandedSymbolId = symbols.data?.find((s) => s.symbol === expandedSymbol)?.id;
+
+  const ticks = useQuery({
+    queryKey: ["stored-ticks", expandedSymbolId],
+    queryFn: () => getTicksBySymbolId(expandedSymbolId!, 12),
+    enabled: expandedSymbolId != null,
     staleTime: 15000,
   });
 
@@ -103,24 +117,52 @@ export default function ExecutionQualityPage() {
                     {expandedSymbol === f.symbol && (
                       <tr className="border-b border-surface-border last:border-0">
                         <td colSpan={5} className="bg-surface-card p-3">
-                          <div className="h-[140px]">
-                            {latencyChart.isPending ? (
-                              <p className="text-sm text-text-muted">Loading…</p>
-                            ) : !latencyChart.data || latencyChart.data.length === 0 ? (
-                              <p className="text-sm text-text-muted">No tick history for {f.symbol} yet.</p>
-                            ) : (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={latencyChart.data}>
-                                  <XAxis dataKey="ts" tick={{ fontSize: 9, fill: "#8d9fbc" }} axisLine={false} tickLine={false} tickFormatter={(v) => new Date(v).toLocaleTimeString()} />
-                                  <YAxis tick={{ fontSize: 9, fill: "#8d9fbc" }} axisLine={false} tickLine={false} />
-                                  <Tooltip
-                                    contentStyle={{ background: "#10141b", border: "1px solid rgba(125,155,205,.2)", fontSize: 11 }}
-                                    labelFormatter={(v) => new Date(v as string).toLocaleTimeString()}
-                                  />
-                                  <Line type="monotone" dataKey="latency_ms" stroke="#3b82f2" strokeWidth={2} dot={false} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            )}
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_1fr]">
+                            <div className="h-[140px]">
+                              {latencyChart.isPending ? (
+                                <p className="text-sm text-text-muted">Loading…</p>
+                              ) : !latencyChart.data || latencyChart.data.length === 0 ? (
+                                <p className="text-sm text-text-muted">No tick history for {f.symbol} yet.</p>
+                              ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <LineChart data={latencyChart.data}>
+                                    <XAxis dataKey="ts" tick={{ fontSize: 9, fill: "#8d9fbc" }} axisLine={false} tickLine={false} tickFormatter={(v) => new Date(v).toLocaleTimeString()} />
+                                    <YAxis tick={{ fontSize: 9, fill: "#8d9fbc" }} axisLine={false} tickLine={false} />
+                                    <Tooltip
+                                      contentStyle={{ background: "#10141b", border: "1px solid rgba(125,155,205,.2)", fontSize: 11 }}
+                                      labelFormatter={(v) => new Date(v as string).toLocaleTimeString()}
+                                    />
+                                    <Line type="monotone" dataKey="latency_ms" stroke="#3b82f2" strokeWidth={2} dot={false} />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              )}
+                            </div>
+                            <div>
+                              <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[.06em] text-text-ghost">
+                                Latest stored ticks
+                              </div>
+                              {ticks.isPending && expandedSymbolId != null ? (
+                                <p className="text-sm text-text-muted">Loading…</p>
+                              ) : !ticks.data || ticks.data.length === 0 ? (
+                                <p className="text-[11px] text-text-muted">No stored ticks for {f.symbol}.</p>
+                              ) : (
+                                <table className="w-full text-[10.5px]">
+                                  <tbody>
+                                    {ticks.data.map((t) => (
+                                      <tr key={t.id} className="border-t border-surface-border font-mono first:border-0">
+                                        <td className="py-1 text-text-ghost">{new Date(t.time).toLocaleTimeString()}</td>
+                                        <td className={`py-1 ${t.side === "BUY" ? "text-green" : t.side === "SELL" ? "text-red" : "text-text-faint"}`}>
+                                          {t.side ?? "—"}
+                                        </td>
+                                        <td className="py-1 text-right text-text-primary">{t.price}</td>
+                                        <td className="py-1 text-right text-text-muted">{t.volume}</td>
+                                        <td className="py-1 text-right text-text-faint">{t.dq_result ?? ""}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>

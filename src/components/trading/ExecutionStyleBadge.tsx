@@ -6,9 +6,9 @@ interface ExecutionStyleBadgeProps {
 }
 
 /**
- * Every order row must show this — execution_style is ALWAYS "INSTANT" today
- * (no slicing/algorithmic execution engine exists yet, even for TWAP/VWAP/
- * OCO/ICEBERG), so don't let a row imply real algorithmic execution.
+ * Every order row must show this — "ALGORITHMIC" (TWAP/VWAP/ICEBERG, real
+ * background slice schedule) vs "INSTANT" (single broker call) is the only
+ * signal of which execution path an order took.
  */
 export function ExecutionStyleBadge({ executionStyle }: ExecutionStyleBadgeProps) {
   const isInstant = executionStyle === "INSTANT";
@@ -24,13 +24,14 @@ export function ExecutionStyleBadge({ executionStyle }: ExecutionStyleBadgeProps
 }
 
 /**
- * Inline caveat copy for the order ticket when a user picks one of the four
- * label-only order types — surfaced BEFORE submission, not discovered after
+ * Inline caveat copy for the order ticket when a user picks an order type
+ * whose label suggests algorithmic execution the backend doesn't actually
+ * have (today: only OCO) — surfaced BEFORE submission, not discovered after
  * the fact from the row badge (FRONTEND_GUIDE.md §8.1 / workplan §4).
  */
 export function algorithmicOrderTypeCaveat(orderType: OrderType): string | null {
   if (!isAlgorithmicOrderType(orderType) && ["TWAP", "VWAP", "OCO", "ICEBERG"].includes(orderType)) {
-    return "Executes instantly, same as Market — algorithmic execution not yet available.";
+    return "Executes instantly, same as Market — algorithmic execution not yet available for this type.";
   }
   return null;
 }

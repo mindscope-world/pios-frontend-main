@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getOfi, getOfiChart, getOfiEnhanced, isNoMarketData, isNotYetComputed } from "../../api/intelligence";
+import { getOfi, getOfiAuto, getOfiChart, getOfiEnhanced, isNoMarketData, isNotYetComputed } from "../../api/intelligence";
 import { useCachedIntelligence } from "../../api/useIntelligence";
 import { IntelligenceEmptyState } from "../ui/IntelligenceEmptyState";
 import { Card, Loading, Pill, Row } from "./shared";
@@ -49,25 +49,66 @@ const DECISION_TONE: Record<string, "green" | "amber" | "red"> = {
   BLOCK: "red",
 };
 
-export function OfiTab({ symbol }: { symbol: string }) {
-  const ofi = useCachedIntelligence(["ofi", symbol], () => getOfi(symbol));
+// /ofi/auto's payload is the tick-history OFI signal *flattened* (no db_ofi/
+// live_ofi nesting, no orderbook block) — see ofi_service.compute_ofi_signal_auto.
+interface OfiAutoPayload {
+  symbol: string;
+  institutional_absorption?: number;
+  liquidity_vacuum?: number;
+  stop_hunt_probability?: number;
+  vol_delta_divergence?: number;
+  net_modifier?: number;
+  decision?: string;
+  allowed_size_lot: number;
+  latency_ms: number;
+}
+
+function fromAutoPayload(a: OfiAutoPayload): OfiPayload {
+  return {
+    symbol: a.symbol,
+    db_ofi: {
+      institutional_absorption: a.institutional_absorption,
+      liquidity_vacuum: a.liquidity_vacuum,
+      stop_hunt_probability: a.stop_hunt_probability,
+      vol_delta_divergence: a.vol_delta_divergence,
+      net_modifier: a.net_modifier,
+      decision: a.decision,
+    },
+    live_ofi: {},
+    orderbook_imbalance: null,
+    orderbook_spread_bps: null,
+    orderbook_liquidity: null,
+    combined_net_modifier: a.net_modifier ?? 0,
+    final_decision: (a.decision as OfiPayload["final_decision"]) ?? "CAUTION",
+    allowed_size_lot: a.allowed_size_lot,
+    latency_ms: a.latency_ms,
+  };
+}
+
+export function OfiTab({ symbol }: { symbol?: string }) {
+  const label = symbol ?? "auto";
+  const ofi = useCachedIntelligence(["ofi", label], () => getOfi(symbol));
   const cacheEmpty = !ofi.isPending && (!ofi.data || isNotYetComputed(ofi.data) || isNoMarketData(ofi.data));
 
-  // /ofi/enhanced runs the exact same compute_ofi() the worker cache mirrors
-  // (ofi_service.py's own docstring: "compute_ofi() already *is* the enhanced
-  // version"), just live instead of cache-read — so this is a same-source
-  // freshness fallback, not a different feature. Only fetched when the
-  // worker hasn't populated the cache yet, to avoid doubling live-compute
-  // load once it has.
+  // Same-source freshness fallback for when the worker hasn't populated the
+  // cache yet: with an explicit symbol, /ofi/enhanced runs the exact same
+  // compute_ofi() the cache mirrors; in AUTO mode, the dedicated /ofi/auto
+  // route computes the tick-history signal for the backend-detected primary
+  // symbol (flat payload, mapped by fromAutoPayload above). Only fetched
+  // while the cache is empty, to avoid doubling live-compute load once the
+  // worker is running.
   const enhanced = useQuery({
-    queryKey: ["ofi-enhanced", symbol],
-    queryFn: () => getOfiEnhanced(symbol) as unknown as Promise<OfiPayload>,
+    queryKey: ["ofi-enhanced", label],
+    queryFn: async (): Promise<OfiPayload> =>
+      symbol
+        ? ((await getOfiEnhanced(symbol)) as unknown as OfiPayload)
+        : fromAutoPayload((await getOfiAuto()) as unknown as OfiAutoPayload),
     enabled: cacheEmpty,
     staleTime: 15000,
   });
 
   const chart = useQuery({
-    queryKey: ["ofi-chart", symbol],
+    queryKey: ["ofi-chart", label],
     queryFn: () => getOfiChart({ symbol, limit: 60 }) as unknown as Promise<OfiChartPoint[]>,
     staleTime: 20000,
     refetchOnWindowFocus: false,
@@ -81,7 +122,7 @@ export function OfiTab({ symbol }: { symbol: string }) {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card
-        title={`Order flow imbalance · ${symbol}`}
+        title={`Order flow imbalance · ${label}`}
         right={
           o && (
             <span className="flex items-center gap-1.5">
@@ -127,7 +168,7 @@ export function OfiTab({ symbol }: { symbol: string }) {
         {pending ? (
           <Loading />
         ) : !o || Object.keys(o.live_ofi).length === 0 ? (
-          <p className="text-sm text-text-muted">No live trade tape available for {symbol} right now.</p>
+          <p className="text-sm text-text-muted">No live trade tape available for {label} right now.</p>
         ) : (
           <>
             <Row label="Buy volume" value={o.live_ofi.buy_volume ?? "—"} />
@@ -140,12 +181,12 @@ export function OfiTab({ symbol }: { symbol: string }) {
       </Card>
 
       <div className="lg:col-span-2">
-        <Card title={`Order flow history · ${symbol}`}>
+        <Card title={`Order flow history · ${label}`}>
           <div className="h-[160px]">
             {chart.isPending ? (
               <Loading />
             ) : !chart.data || chart.data.length === 0 ? (
-              <p className="text-sm text-text-muted">No recent tick history for {symbol}.</p>
+              <p className="text-sm text-text-muted">No recent tick history for {label}.</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chart.data}>

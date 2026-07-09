@@ -1,20 +1,30 @@
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getEquityCurve, getPortfolioMetrics, listPositions } from "../../api/positions";
 import { getRiskMetrics } from "../../api/risk";
 import { NullableNumber } from "../../components/ui/NullableNumber";
+import { useChannelSocket } from "../../realtime/useChannelSocket";
 
 export default function PortfolioPage() {
-  // Positions/equity_curve/portfolio_metrics are computed for a hardcoded
-  // system user server-side (see app/workers/intelligence_worker.py) and
-  // can't be pushed per-trader over the "positions"/"equity_curve" WS
-  // channels — see roadmap-development-progress.md. Plain interval polling
-  // is the honest stopgap until the backend publishes these per-user.
-  const positions = useQuery({ queryKey: ["positions"], queryFn: listPositions, staleTime: 15000, refetchInterval: 15000 });
-  const metrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000, refetchInterval: 20000 });
-  const equity = useQuery({ queryKey: ["equity-curve"], queryFn: getEquityCurve, staleTime: 30000, refetchInterval: 30000 });
+  // GET /positions* is per-trader (user-scoped DB rows), and fills now net
+  // into the requesting trader's own Position/PnLSnapshot rows server-side
+  // (app/services/positions_service.apply_fill_to_position). The API process
+  // pushes a user-scoped "positions" event after each fill — the polls below
+  // are just a slow safety net behind that push.
+  const queryClient = useQueryClient();
+  const positions = useQuery({ queryKey: ["positions"], queryFn: listPositions, staleTime: 15000, refetchInterval: 60000 });
+  const metrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000, refetchInterval: 60000 });
+  const equity = useQuery({ queryKey: ["equity-curve"], queryFn: getEquityCurve, staleTime: 30000, refetchInterval: 60000 });
   const risk = useQuery({ queryKey: ["risk-metrics"], queryFn: getRiskMetrics, staleTime: 20000, refetchInterval: 20000 });
+
+  useChannelSocket("positions", undefined, (msg) => {
+    if (msg.event === "position_update") {
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["equity-curve"] });
+    }
+  });
 
   const openPositions = positions.data?.filter((p) => p.is_open) ?? [];
 
@@ -46,7 +56,7 @@ export default function PortfolioPage() {
                 {openPositions.map((p) => (
                   <tr key={p.id} className="border-b border-surface-border last:border-0">
                     <td className="px-2.5 py-2.5">{p.symbol?.symbol ?? "—"}</td>
-                    <td className={`px-2.5 py-2.5 ${p.side === "BUY" ? "text-green" : "text-red"}`}>{p.side === "BUY" ? "Long" : "Short"}</td>
+                    <td className={`px-2.5 py-2.5 ${p.side === "LONG" ? "text-green" : "text-red"}`}>{p.side === "LONG" ? "Long" : "Short"}</td>
                     <td className="px-2.5 py-2.5">{p.avg_cost}</td>
                     <td className="px-2.5 py-2.5">{p.qty}</td>
                     <td className={`px-2.5 py-2.5 font-semibold ${p.unrealized_pnl >= 0 ? "text-green" : "text-red"}`}>

@@ -36,7 +36,7 @@ interface ScenariosPayload {
 
 const CARD_TONE: Record<string, "green" | "amber" | "red"> = { bull: "green", base: "amber", bear: "red" };
 
-export function ScenariosTab({ symbol }: { symbol: string }) {
+export function ScenariosTab({ symbol }: { symbol?: string }) {
   const scenarios = useCachedIntelligence(["scenarios", symbol], () => getScenarios(symbol));
 
   const d =

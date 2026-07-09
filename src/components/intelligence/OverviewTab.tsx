@@ -1,13 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
-import { getDecisionCurrent, getTraces, getWhyNotTrade, isNoMarketData, isNotYetComputed } from "../../api/intelligence";
+import {
+  getDecisionCurrent,
+  getDecisionFeed,
+  getRejectionStats,
+  getTraces,
+  getWhyNotTrade,
+  isNoMarketData,
+  isNotYetComputed,
+} from "../../api/intelligence";
 import { useCachedIntelligence } from "../../api/useIntelligence";
 import { IntelligenceEmptyState } from "../ui/IntelligenceEmptyState";
 import { Row } from "./shared";
 
 // Verified against decision_service.py's compute_decision_current() — live,
-// per-request, real authenticated user (unlike /intelligence/decision/feed,
-// which reads a worker-cache key computed for a hardcoded system user and is
-// deliberately NOT wired here — see roadmap-development-progress.md).
+// per-request, real authenticated user. /intelligence/decision/feed (the
+// worker-cached engine feed, computed for the system service account) renders
+// separately below, clearly labeled as the engine's own history rather than
+// merged into these per-user cards.
 interface DecisionCurrentPayload {
   symbol: string;
   strategy_name: string;
@@ -71,13 +80,46 @@ const DECISION_TAG: Record<string, string> = {
   REDUCE: "bg-amber-bg text-amber border-amber-border",
 };
 
-export function OverviewTab({ symbol }: { symbol: string }) {
-  const traces = useCachedIntelligence(["traces", symbol], () => getTraces(symbol));
-  const whyNotTrade = useCachedIntelligence(["why-not-trade", symbol], () => getWhyNotTrade(symbol));
+// Mirrors decision_service.compute_decision_feed()'s items/summary dicts —
+// derived from the system engine account's order history, worker-cached.
+interface DecisionFeedItem {
+  id: string;
+  evaluated_at: string;
+  symbol: string;
+  side: "BUY" | "SELL";
+  order_type: string;
+  decision: "ALLOW" | "BLOCK" | "WAIT";
+  final_size_lot: number | null;
+  filled_qty: number | null;
+  avg_fill_price: number | null;
+}
+
+interface DecisionFeedPayload {
+  items: DecisionFeedItem[];
+  summary: {
+    total_orders: number;
+    filled: number;
+    blocked: number;
+    fill_rate_pct: number;
+    total_pnl_usd: number;
+  };
+}
+
+export function OverviewTab({ symbol }: { symbol?: string }) {
+  const label = symbol ?? "auto";
+  const traces = useCachedIntelligence(["traces", label], () => getTraces(symbol));
+  const whyNotTrade = useCachedIntelligence(["why-not-trade", label], () => getWhyNotTrade(symbol));
+  const decisionFeed = useCachedIntelligence(["decision-feed", label], () => getDecisionFeed(symbol));
   const decisionCurrent = useQuery({
-    queryKey: ["decision-current", symbol],
+    queryKey: ["decision-current", label],
     queryFn: () => getDecisionCurrent(symbol) as unknown as Promise<DecisionCurrentPayload>,
     staleTime: 20000,
+    refetchOnWindowFocus: false,
+  });
+  const rejectionStats = useQuery({
+    queryKey: ["rejection-stats"],
+    queryFn: getRejectionStats,
+    staleTime: 60000,
     refetchOnWindowFocus: false,
   });
   const dc = decisionCurrent.data && !(decisionCurrent.data as { error?: string }).error ? decisionCurrent.data : null;
@@ -97,6 +139,11 @@ export function OverviewTab({ symbol }: { symbol: string }) {
       ? (whyNotTrade.data as unknown as WhyNotTradePayload)
       : null;
 
+  const feed =
+    decisionFeed.data && !isNotYetComputed(decisionFeed.data) && !isNoMarketData(decisionFeed.data)
+      ? (decisionFeed.data as unknown as DecisionFeedPayload)
+      : null;
+
   return (
     <div className="space-y-4">
       <div className="flex gap-2.5 rounded-[9px] border border-blue-border bg-blue-bg p-3 text-[11.5px] leading-relaxed text-blue">
@@ -108,7 +155,7 @@ export function OverviewTab({ symbol }: { symbol: string }) {
         <div className="rounded-[10px] border border-surface-border bg-surface-raised">
           <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
             <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
-              Decision trace · {symbol} · recent orders
+              Decision trace · {label} · recent orders
             </span>
           </div>
           {traces.isPending ? (
@@ -118,7 +165,7 @@ export function OverviewTab({ symbol }: { symbol: string }) {
               {traces.data && isNotYetComputed(traces.data) ? (
                 <IntelligenceEmptyState reason="not_yet_computed" symbol={symbol} />
               ) : (
-                <p className="text-sm text-text-muted">No recent orders to trace for {symbol}.</p>
+                <p className="text-sm text-text-muted">No recent orders to trace for {label}.</p>
               )}
             </div>
           ) : (
@@ -142,7 +189,7 @@ export function OverviewTab({ symbol }: { symbol: string }) {
 
         <div className="rounded-[10px] border border-surface-border bg-surface-raised">
           <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-            <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Why not trade · {symbol}</span>
+            <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Why not trade · {label}</span>
             {wnt && <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${DECISION_TAG[wnt.final_decision]}`}>{wnt.final_decision}</span>}
           </div>
           <div className="p-4">
@@ -183,14 +230,14 @@ export function OverviewTab({ symbol }: { symbol: string }) {
 
       <div className="rounded-[10px] border border-surface-border bg-surface-raised">
         <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-          <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Live decision pipeline · {symbol}</span>
+          <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Live decision pipeline · {label}</span>
           {dc && <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${DECISION_TAG[dc.decision]}`}>{dc.decision}</span>}
         </div>
         <div className="p-4">
           {decisionCurrent.isPending ? (
             <p className="text-sm text-text-muted">Loading…</p>
           ) : !dc ? (
-            <p className="text-sm text-text-muted">Live decision pipeline unavailable for {symbol} right now.</p>
+            <p className="text-sm text-text-muted">Live decision pipeline unavailable for {label} right now.</p>
           ) : (
             <div className="grid grid-cols-1 gap-x-6 lg:grid-cols-2">
               <div>
@@ -213,16 +260,113 @@ export function OverviewTab({ symbol }: { symbol: string }) {
         </div>
       </div>
 
+      <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+        <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+          <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
+            Engine decision feed · system engine orders
+          </span>
+          {feed && (
+            <span className="text-[10px] text-text-faint">
+              {feed.summary.total_orders} orders · {feed.summary.fill_rate_pct}% filled · P&L $
+              {feed.summary.total_pnl_usd.toLocaleString()}
+            </span>
+          )}
+        </div>
+        {decisionFeed.isPending ? (
+          <p className="p-4 text-sm text-text-muted">Loading…</p>
+        ) : !feed ? (
+          <div className="p-4">
+            <IntelligenceEmptyState reason={decisionFeed.data && isNotYetComputed(decisionFeed.data) ? "not_yet_computed" : "no_market_data"} symbol={symbol} />
+          </div>
+        ) : feed.items.length === 0 ? (
+          <p className="p-4 text-sm text-text-muted">The system engine hasn't placed any orders yet.</p>
+        ) : (
+          <>
+            <table className="w-full text-[11.5px]">
+              <thead>
+                <tr className="bg-surface-card text-[9.5px] uppercase tracking-[.06em] text-text-faint">
+                  <th className="px-2.5 py-2 text-left">Evaluated</th>
+                  <th className="px-2.5 py-2 text-left">Symbol</th>
+                  <th className="px-2.5 py-2 text-left">Side</th>
+                  <th className="px-2.5 py-2 text-left">Type</th>
+                  <th className="px-2.5 py-2 text-left">Decision</th>
+                  <th className="px-2.5 py-2 text-right">Filled / size</th>
+                  <th className="px-2.5 py-2 text-right">Avg fill</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feed.items.slice(0, 8).map((it) => (
+                  <tr key={it.id} className="border-t border-surface-border">
+                    <td className="px-2.5 py-2 font-mono text-text-faint">{new Date(it.evaluated_at).toLocaleString()}</td>
+                    <td className="px-2.5 py-2 font-semibold text-text-primary">{it.symbol}</td>
+                    <td className={`px-2.5 py-2 ${it.side === "BUY" ? "text-green" : "text-red"}`}>{it.side}</td>
+                    <td className="px-2.5 py-2">{it.order_type}</td>
+                    <td className="px-2.5 py-2">
+                      <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${DECISION_TAG[it.decision] ?? ""}`}>
+                        {it.decision}
+                      </span>
+                    </td>
+                    <td className="px-2.5 py-2 text-right font-mono">
+                      {it.filled_qty ?? 0}/{it.final_size_lot ?? "—"}
+                    </td>
+                    <td className="px-2.5 py-2 text-right font-mono">{it.avg_fill_price ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="border-t border-surface-border px-4 py-2 text-[10px] text-text-ghost">
+              Derived from the system engine account's order history (worker-cached) — your own orders live in the
+              Orders screen and the per-user cards above.
+            </p>
+          </>
+        )}
+      </div>
+
       <div className="rounded-[10px] border border-surface-border-strong bg-surface-raised">
         <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-          <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Calibration digest</span>
-          <span className="text-[10px] text-text-faint">Not available yet</span>
+          <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
+            Calibration · rejections & risk alerts (24h)
+          </span>
+          {rejectionStats.data && (
+            <span className="text-[10px] text-text-faint">
+              {rejectionStats.data.reduce((s, r) => s + r.count_24h, 0)} events
+            </span>
+          )}
         </div>
-        <div className="p-4 text-[11.5px] leading-relaxed text-text-muted">
-          There is no backend aggregation today for "eligible setups taken vs. skipped" or a rejection-reason
-          breakdown across a rolling window — the two cards above (decision trace, why-not-trade) are the real,
-          per-symbol reasoning the backend currently produces. A calibration digest would need a new aggregation
-          endpoint; tracked as a future backend feature rather than shown here with invented numbers.
+        <div className="p-4">
+          {rejectionStats.isPending ? (
+            <p className="text-sm text-text-muted">Loading…</p>
+          ) : !rejectionStats.data || rejectionStats.data.length === 0 ? (
+            <p className="text-sm text-text-muted">
+              Nothing rejected and no P1/P2 risk alerts in the last 24h — no calibration signal to show.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {rejectionStats.data.map((r) => {
+                const max = Math.max(...rejectionStats.data!.map((x) => x.count_24h), 1);
+                const isRiskAlert = r.reason.startsWith("Risk Alert:");
+                return (
+                  <div key={r.reason} className="flex items-center gap-2 text-[11px]">
+                    <span className="w-52 flex-shrink-0 truncate text-text-muted" title={r.reason}>
+                      {r.reason}
+                    </span>
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-overlay">
+                      <span
+                        className={`block h-full rounded-full ${isRiskAlert ? "bg-amber" : "bg-red"}`}
+                        style={{ width: `${(r.count_24h / max) * 100}%` }}
+                      />
+                    </span>
+                    <span className="w-8 text-right font-mono font-semibold text-text-primary">{r.count_24h}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="mt-3 text-[10px] leading-relaxed text-text-ghost">
+            Your rejected orders grouped by reason, plus P1/P2 risk alerts by category (GET
+            /intelligence/rejection-stats). The fuller "eligible setups taken vs. skipped" digest still needs a
+            dedicated backend aggregation — this is the real slice of it that exists today.
+          </p>
         </div>
       </div>
     </div>

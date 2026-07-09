@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getSignalConflict } from "../../api/intelligence";
+import { getSignalConflict, getSignalConflictAuto } from "../../api/intelligence";
 import { Card, Loading, Pill, Row } from "./shared";
 
 // Verified against app/services/intelligence/signal_conflict_service.py's
@@ -22,10 +22,13 @@ const LEVEL_TONE: Record<string, "green" | "amber" | "red" | "neutral"> = {
   HIGH: "red",
 };
 
-export function SignalConflictTab() {
+export function SignalConflictTab({ auto = false }: { auto?: boolean }) {
   const sc = useQuery({
-    queryKey: ["signal-conflict"],
-    queryFn: () => getSignalConflict() as unknown as Promise<SignalConflictPayload>,
+    queryKey: ["signal-conflict", auto],
+    // Both routes are live-computed for the primary symbol; AUTO selects the
+    // dedicated /signal-conflict/auto variant (raw detector output, same
+    // fields minus the regime/momentum wrapper — all optional here anyway).
+    queryFn: () => (auto ? getSignalConflictAuto() : getSignalConflict()) as unknown as Promise<SignalConflictPayload>,
     staleTime: 20000,
     refetchOnWindowFocus: false,
   });
@@ -60,11 +63,11 @@ export function SignalConflictTab() {
       <Card title="Conflicting signal pairs">
         {sc.isPending ? (
           <Loading />
-        ) : !d || d.conflicting_signals.length === 0 ? (
+        ) : !d || (d.conflicting_signals ?? []).length === 0 ? (
           <p className="text-sm text-text-muted">No conflicting signals detected right now.</p>
         ) : (
           <div className="space-y-2">
-            {d.conflicting_signals.map((c, i) => (
+            {(d.conflicting_signals ?? []).map((c, i) => (
               <div key={i} className="rounded-md border border-surface-border p-2.5 text-[11px]">
                 <div className="font-semibold text-text-primary">
                   {c.signal_a} vs {c.signal_b}

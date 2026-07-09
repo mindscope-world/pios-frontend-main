@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getNotificationsLatest, type NotificationSnapshotItem } from "../../api/intelligence";
 import { useNotificationStream, type NotificationEvent } from "../../realtime/useNotificationStream";
 import { useSystemNoticeStore } from "../../stores/systemNoticeStore";
 
@@ -38,6 +39,24 @@ const TAG_CLASSES: Record<AlertItem["tone"], string> = {
   critical: "bg-red-bg text-red border-red-border",
 };
 
+// GET /intelligence/notifications/latest — one-shot severity snapshot across
+// the most active symbols, used to seed the bell on mount so it isn't empty
+// until the first SSE stream event arrives. Only non-OK entries become items
+// (an all-clear snapshot is not an alert). Snapshot rows are informational,
+// never "critical" — the critical banner stays reserved for real stream
+// events (kill switch).
+function snapshotToItems(items: NotificationSnapshotItem[]): AlertItem[] {
+  return items
+    .filter((n) => n.severity !== "OK")
+    .map((n) => ({
+      id: `snapshot-${n.symbol}-${n.evaluated_at}`,
+      tone: "warn" as const,
+      tagLabel: n.severity === "BLOCK" ? "Blocked" : "Watch",
+      text: `${n.symbol}: ${n.decision} — regime ${n.regime} (${n.regime_conf}%), feed age ${Math.round(n.feed_age_ms)}ms`,
+      ts: n.evaluated_at,
+    }));
+}
+
 export function AlertCenter({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -51,6 +70,22 @@ export function AlertCenter({ onNavigate }: { onNavigate: (screen: string) => vo
       showBanner({ text: item.text, tone: "red" });
     }
   });
+
+  // Seed once on mount from the REST snapshot; live stream items then stack
+  // on top. Appended behind any stream items that raced in first.
+  useEffect(() => {
+    let cancelled = false;
+    getNotificationsLatest(10)
+      .then((snap) => {
+        if (cancelled) return;
+        const seeded = snapshotToItems(snap.notifications);
+        if (seeded.length > 0) setAlerts((prev) => [...prev, ...seeded].slice(0, MAX_ALERTS));
+      })
+      .catch(() => {}); // seeding is best-effort — the stream still populates the bell
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {

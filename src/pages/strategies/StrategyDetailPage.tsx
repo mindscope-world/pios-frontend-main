@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   advanceStrategy,
+  deleteStrategy,
   gateRequirement,
   getStrategy,
   nextStage,
@@ -19,6 +20,10 @@ import { useAuthStore } from "../../stores/authStore";
 // server-side (app/api/v1/endpoints/strategies.py) — hide the mutating UI
 // for other roles rather than let it 403.
 const QUANT_ROLES = new Set(["admin", "quant"]);
+
+// DELETE /strategies/{id} 409s for these stages server-side ("retire it
+// first") — disable the button up front instead of surfacing the 409.
+const UNDELETABLE_STAGES = new Set(["LIVE_SMALL", "SCALED", "MONITOR"]);
 
 // advance_stage()'s GateFailed exception has no HTTP-translation wrapper at
 // the router level (app/services/strategy_service.py:raise_http_for exists
@@ -59,6 +64,10 @@ export default function StrategyDetailPage() {
   const [retireReason, setRetireReason] = useState("");
   const [retiring, setRetiring] = useState(false);
   const [retireError, setRetireError] = useState<string | null>(null);
+
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (strategy.data) {
@@ -108,6 +117,17 @@ export default function StrategyDetailPage() {
       setRetireError(null);
     },
     onError: (err) => setRetireError(err instanceof ApiError ? (err.body as { detail?: string } | null)?.detail ?? err.message : "Retire failed."),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => deleteStrategy(strategyId),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["strategy", strategyId] });
+      queryClient.invalidateQueries({ queryKey: ["strategies"] });
+      navigate("/strategies");
+    },
+    onError: (err) =>
+      setDeleteError(err instanceof ApiError ? (err.body as { detail?: string } | null)?.detail ?? err.message : "Delete failed."),
   });
 
   if (strategy.isPending) return <p className="text-sm text-text-muted">Loading…</p>;
@@ -234,6 +254,51 @@ export default function StrategyDetailPage() {
                     onClick={() => {
                       setRetiring(false);
                       setRetireError(null);
+                    }}
+                    className="rounded-md border border-surface-border-strong px-3 py-1 text-[10.5px] font-semibold text-text-faint"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {canManage && (
+          <div className="border-t border-surface-border p-4">
+            {!deleting ? (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setDeleting(true)}
+                  disabled={UNDELETABLE_STAGES.has(s.lifecycle_stage)}
+                  className="text-[11px] font-semibold text-text-faint hover:text-red disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete strategy
+                </button>
+                {UNDELETABLE_STAGES.has(s.lifecycle_stage) && (
+                  <span className="text-[10.5px] text-text-ghost">Live strategies can't be deleted — retire first.</span>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-red-border bg-surface-card p-3">
+                <p className="mb-2 text-[11px] text-text-muted">
+                  Permanently delete "{s.name}" and its backtest history? Unlike retiring, this removes the record
+                  entirely and cannot be undone.
+                </p>
+                {deleteError && <p className="mb-2 text-[10.5px] text-red">{deleteError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => remove.mutate()}
+                    disabled={remove.isPending}
+                    className="rounded-md border border-red-border bg-red-bg px-3 py-1 text-[10.5px] font-semibold text-red disabled:opacity-50"
+                  >
+                    {remove.isPending ? "Deleting…" : "Delete permanently"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDeleting(false);
+                      setDeleteError(null);
                     }}
                     className="rounded-md border border-surface-border-strong px-3 py-1 text-[10.5px] font-semibold text-text-faint"
                   >

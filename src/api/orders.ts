@@ -34,6 +34,15 @@ export function getOrderFills(orderId: string) {
   return apiFetch<FillOut[]>(`/orders/${orderId}/fills`);
 }
 
+// GET /orders/fills/all — every fill for the current user across all orders,
+// newest first, paginated (orders.py:list_all_fills).
+export function listAllFills(params: { page?: number; page_size?: number } = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined) qs.set(k, String(v));
+  const s = qs.toString();
+  return apiFetch<PaginatedResponse<FillOut>>(`/orders/fills/all${s ? `?${s}` : ""}`);
+}
+
 export function getOrderTca(orderId: string) {
   return apiFetch<TCAReport>(`/orders/${orderId}/tca`);
 }

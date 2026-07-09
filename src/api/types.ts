@@ -55,11 +55,11 @@ export type OrderSide = "BUY" | "SELL";
 // all 8 are valid order_type values end to end.
 export type OrderType = "MARKET" | "LIMIT" | "STOP" | "STOP_LIMIT" | "OCO" | "TWAP" | "VWAP" | "ICEBERG";
 
-// Order types with a real slicing/algorithmic execution engine. Empty today —
-// every order type instant-fills via the broker adapter (see OrderOut.execution_style
-// below). Update if app/schemas/all_schemas.py's _ALGORITHMIC_ORDER_TYPES ever
-// stops being an empty set.
-export const ALGORITHMIC_ORDER_TYPES: ReadonlySet<OrderType> = new Set();
+// Order types with a real slicing/algorithmic execution engine — mirrors
+// app/schemas/all_schemas.py's _ALGORITHMIC_ORDER_TYPES exactly. These come
+// back SUBMITTED with zero fills and fill over a background slice schedule
+// (app/services/execution_algo.py); everything else instant-fills.
+export const ALGORITHMIC_ORDER_TYPES: ReadonlySet<OrderType> = new Set(["TWAP", "VWAP", "ICEBERG"]);
 
 export type OrderStatus = "NEW" | "SUBMITTED" | "PARTIAL" | "FILLED" | "CANCELLED" | "REJECTED" | "EXPIRED";
 
@@ -119,8 +119,8 @@ export interface OrderOut {
   submitted_at: string | null;
   filled_at: string | null;
   created_at: string;
-  // computed_field on the backend — ALWAYS "INSTANT" today, see
-  // isAlgorithmicOrderType() above. Show this on every order row.
+  // computed_field on the backend — "ALGORITHMIC" for TWAP/VWAP/ICEBERG,
+  // "INSTANT" otherwise. Show this on every order row.
   execution_style: ExecutionStyle;
 }
 
@@ -172,7 +172,9 @@ export interface SymbolOut {
 export interface PositionOut {
   id: string;
   symbol: SymbolOut | null;
-  side: OrderSide;
+  // Position side is LONG/SHORT (all_models.py PosSideEnum), not the
+  // BUY/SELL order side.
+  side: "LONG" | "SHORT";
   qty: number;
   avg_cost: number;
   unrealized_pnl: number;
@@ -211,10 +213,15 @@ export interface PortfolioMetricsOut {
 
 export type BrokerType = "MT5" | "IBKR" | "ALPACA" | "OANDA" | "CCXT" | "LMAX" | "CUSTOM" | "BINANCE";
 
-// app/services/broker_service.py:211-216 ADAPTER_MAP — the only broker types
-// with a real (non-simulated) adapter. Everything else in BrokerType forces
+// app/services/broker_service.py ADAPTER_MAP — the only broker types with a
+// real (non-simulated) adapter. Everything else in BrokerType forces
 // is_paper=true or the backend raises 422 UnsupportedBrokerError.
-export const REAL_BROKER_TYPES: ReadonlySet<BrokerType> = new Set(["ALPACA", "BINANCE", "CCXT"]);
+// MT5 has no REST API to call out to -- its adapter depends on an Expert
+// Advisor connecting to /ws/mt5/{broker_id} with the broker's `passphrase`
+// as a bridge token. Live trading works once that EA is paired; until then
+// orders fail fast with a clear "EA not connected" rejection rather than a
+// silent paper fill.
+export const REAL_BROKER_TYPES: ReadonlySet<BrokerType> = new Set(["ALPACA", "BINANCE", "CCXT", "MT5"]);
 
 export function supportsLiveTrading(brokerType: BrokerType): boolean {
   return REAL_BROKER_TYPES.has(brokerType);

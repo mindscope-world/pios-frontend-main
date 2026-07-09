@@ -3,12 +3,10 @@ import { apiFetch } from "./client";
 // Mirrors app/api/v1/endpoints/execution_quality.py exactly — none of its
 // routes declare a Pydantic response_model, so these are hand-typed against
 // the actual return dicts (data_integrity_status, feed_latency_chart,
-// tca_summary, slippage_chart). /market/ticks/{symbol_id} (the same file's
-// third router) is deliberately not wrapped here: the frontend has no
-// symbol->numeric-id lookup available outside of positions/orders payloads,
-// which only cover symbols the user has traded, not the full active-symbol
-// universe /data/integrity/status reports on — see
-// roadmap-development-progress.md.
+// tca_summary, slippage_chart, get_ticks_by_id). The symbol→numeric-id
+// lookup for getTicksBySymbolId comes from GET /data/symbols
+// (api/data_quality.ts:listDQSymbols), which covers the full active-symbol
+// universe — the old "no reliable id lookup" blocker no longer applies.
 
 export interface FeedStatus {
   symbol: string;
@@ -84,4 +82,21 @@ export interface SlippageChartPoint {
 
 export function getSlippageChart(hours = 24) {
   return apiFetch<SlippageChartPoint[]>(`/execution/tca/slippage-chart?hours=${hours}`);
+}
+
+// GET /market/ticks/{symbol_id} (execution_quality.py's market_ticks_router)
+// — latest stored ticks for a symbol by numeric DB id, newest first. price/
+// volume come back as strings (the endpoint str()s its Numerics).
+export interface StoredTick {
+  id: number;
+  time: string;
+  symbol_id: number;
+  price: string;
+  volume: string;
+  side: string | null;
+  dq_result: string | null;
+}
+
+export function getTicksBySymbolId(symbolId: number, limit = 50) {
+  return apiFetch<StoredTick[]>(`/market/ticks/${symbolId}?limit=${limit}`);
 }
