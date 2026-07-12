@@ -217,7 +217,9 @@ export function MarketsTab({ symbol }: { symbol?: string }) {
             <p className="text-sm text-text-muted">
               {ticker.data?.error === "oanda_credentials_missing"
                 ? "Forex ticker needs OANDA credentials configured server-side."
-                : "Live ticker unavailable right now."}
+                : ticker.data?.error === "alpaca_credentials_missing"
+                  ? "Equity ticker needs Alpaca credentials configured server-side."
+                  : "Live ticker unavailable right now."}
             </p>
           ) : (
             <>

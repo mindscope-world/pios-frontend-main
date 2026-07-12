@@ -82,6 +82,16 @@ export default function OrdersPage() {
                 {v === "orders" ? "Order history" : "All fills"}
               </button>
             ))}
+            {/* Orders are PLACED on the Execution page's ticket (ModeActions),
+                not here — this page is history only. Give that a signpost. */}
+            {canCancel && (
+              <Link
+                to="/execution"
+                className="rounded-md border border-green-border bg-green-bg px-3 py-1 text-[10.5px] font-bold uppercase tracking-[.06em] text-green"
+              >
+                + New order
+              </Link>
+            )}
           </div>
           {view === "orders" && (
           <form onSubmit={applyFilters} className="flex items-center gap-2">

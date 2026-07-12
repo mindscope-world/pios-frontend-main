@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { getBrokerAccount, listBrokers } from "../../api/brokers";
+import type { BrokerOut } from "../../api/types";
 import { getEquityCurve, getPortfolioMetrics, listPositions } from "../../api/positions";
 import { getRiskMetrics } from "../../api/risk";
 import { NullableNumber } from "../../components/ui/NullableNumber";
@@ -96,6 +98,8 @@ export default function PortfolioPage() {
         </div>
       </div>
 
+      <BrokerAccountsCard />
+
       <div className="rounded-[10px] border border-surface-border bg-surface-raised">
         <div className="border-b border-surface-border px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
           Portfolio intelligence
@@ -115,6 +119,80 @@ export default function PortfolioPage() {
           <ProgressRow label="Max drawdown vs limit" value={`${drawdownVsLimitPct.toFixed(0)}%`} pct={drawdownVsLimitPct} color={drawdownVsLimitPct > 70 ? "#ef3b57" : "#f2a93b"} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// Live balances straight from each active broker connection (GET
+// /brokers/{id}/account). Shapes differ per adapter — Alpaca returns
+// {buying_power, equity}, the paper adapter a fixed balance, CCXT a
+// per-asset balances map — so entries render generically.
+function BrokerAccountsCard() {
+  const brokers = useQuery({
+    queryKey: ["brokers-active"],
+    queryFn: () => listBrokers({ page_size: 50 }),
+    staleTime: 60000,
+  });
+  const activeBrokers: BrokerOut[] = (brokers.data?.items ?? []).filter((b) => b.is_active);
+
+  const accounts = useQueries({
+    queries: activeBrokers.map((b) => ({
+      queryKey: ["broker-account", b.id],
+      queryFn: () => getBrokerAccount(b.id),
+      staleTime: 30000,
+      refetchInterval: 60000,
+      retry: 1,
+    })),
+  });
+
+  if (!brokers.isPending && activeBrokers.length === 0) return null;
+
+  return (
+    <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+      <div className="border-b border-surface-border px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
+        Broker accounts
+      </div>
+      {brokers.isPending ? (
+        <p className="p-4 text-sm text-text-muted">Loading broker connections…</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-3">
+          {activeBrokers.map((b, i) => {
+            const acct = accounts[i];
+            return (
+              <div key={b.id} className="rounded-[8px] border border-surface-border bg-surface-card p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="truncate text-[12px] font-semibold text-text-primary">{b.name}</div>
+                  <span className="shrink-0 rounded-full bg-surface-overlay px-2 py-0.5 text-[8.5px] uppercase tracking-[.06em] text-text-faint">
+                    {b.broker_type}
+                    {b.is_paper ? " · paper" : ""}
+                  </span>
+                </div>
+                {acct?.isPending ? (
+                  <p className="text-[11px] text-text-muted">Fetching balance…</p>
+                ) : acct?.isError ? (
+                  <p className="text-[11px] text-red">Balance unavailable from broker.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {Object.entries(acct?.data ?? {}).map(([k, v]) => (
+                      <div key={k} className="flex justify-between text-[11.5px]">
+                        <span className="capitalize text-text-faint">{k.replace(/_/g, " ")}</span>
+                        <span className="font-semibold text-text-primary">
+                          {typeof v === "number"
+                            ? `${["buying_power", "equity", "balance", "cash"].includes(k) ? "$" : ""}${v.toLocaleString(undefined, { maximumFractionDigits: 8 })}`
+                            : String(v)}
+                        </span>
+                      </div>
+                    ))}
+                    {Object.keys(acct?.data ?? {}).length === 0 && (
+                      <p className="text-[11px] text-text-muted">No balance data returned.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
