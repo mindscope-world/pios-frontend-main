@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
+  getAlpacaCryptoSymbols,
   getCommandCenter,
   getMarketOrderbook,
   getWhyNotTrade,
@@ -14,6 +15,7 @@ import { getPortfolioMetrics, listPositions } from "../../api/positions";
 import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptyState";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { ModeActions } from "../../components/execution/ModeActions";
+import { PriceChart } from "../../components/execution/PriceChart";
 import { useChannelSocket } from "../../realtime/useChannelSocket";
 import {
   useMarketStream,
@@ -22,7 +24,12 @@ import {
   type MarketWhyNotTradeEvent,
 } from "../../realtime/useMarketStream";
 
-const SYMBOLS = ["BTC/USDT", "EUR/USD", "XAU/USD"];
+// Crypto chips are the full Alpaca-supported currency list, fetched live
+// (see getAlpacaCryptoSymbols) so this always matches Alpaca's real listing
+// rather than a hardcoded subset; this fallback covers the brief window
+// before that loads (or the rare case Alpaca credentials aren't configured).
+const DEFAULT_CRYPTO_SYMBOLS = ["BTC/USDT"];
+const FOREX_SYMBOLS = ["EUR/USD", "XAU/USD"];
 
 // Narrowed against command_center_service.py's real return dict — see
 // api/intelligence.ts's note on why these payloads stay loosely typed at
@@ -59,9 +66,22 @@ function normalizeSym(s: string): string {
 }
 
 export default function ExecutionPage() {
-  const [symbol, setSymbol] = useState(SYMBOLS[0]);
+  const [symbol, setSymbol] = useState(DEFAULT_CRYPTO_SYMBOLS[0]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // Full Alpaca crypto currency list — cached an hour both client- and
+  // server-side since Alpaca's listing changes rarely (see the backend's
+  // list_alpaca_crypto_symbols docstring for the dedup-by-base rationale).
+  const cryptoSymbols = useQuery({
+    queryKey: ["alpaca-crypto-symbols"],
+    queryFn: getAlpacaCryptoSymbols,
+    staleTime: 60 * 60 * 1000,
+  });
+  const SYMBOLS = [
+    ...(cryptoSymbols.data?.symbols.length ? cryptoSymbols.data.symbols.map((s) => s.symbol) : DEFAULT_CRYPTO_SYMBOLS),
+    ...FOREX_SYMBOLS,
+  ];
 
   const commandCenter = useCachedIntelligence(["command-center", symbol], () => getCommandCenter(symbol));
   const whyNotTrade = useCachedIntelligence(["why-not-trade", symbol], () => getWhyNotTrade(symbol));
@@ -157,7 +177,7 @@ export default function ExecutionPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="flex gap-1.5">
+        <div className="flex max-h-[74px] max-w-[640px] flex-wrap gap-1.5 overflow-y-auto pr-1">
           {SYMBOLS.map((s) => {
             const snap = snapshotFor(s);
             return (
@@ -279,6 +299,7 @@ export default function ExecutionPage() {
               )}
             </div>
           )}
+          <PriceChart symbol={symbol} />
           {(orderbook.data?.asks ?? []).slice(0, 2).reverse().map(([px, sz], i) => (
             <div key={`ask-${i}`} className="flex justify-between border-t border-surface-border px-4 py-1.5 text-[11px]">
               <span className="font-bold text-red">{px.toLocaleString()}</span>

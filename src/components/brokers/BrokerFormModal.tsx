@@ -89,7 +89,17 @@ export function BrokerFormModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
 
-          {brokerType === "CCXT" && <LabeledInput label="Exchange id (ccxt)" value={exchangeId} onChange={setExchangeId} placeholder="e.g. binance, kraken" />}
+          {brokerType === "CCXT" && (
+            <div>
+              <LabeledInput label="Exchange id (ccxt)" value={exchangeId} onChange={setExchangeId} placeholder="e.g. binance, kraken" />
+              <p className="mt-1 text-[10.5px] leading-relaxed text-text-faint">
+                This creates a live/paper <strong className="text-text-muted">trading</strong> connection to the
+                exchange you name here. It's separate from the app's built-in crypto{" "}
+                <strong className="text-text-muted">price data</strong> (Kraken/OKX/KuCoin/Bybit), which is read-only
+                and needs no connection.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center gap-2 rounded-md border border-surface-border bg-surface-raised px-3 py-2">
             <input

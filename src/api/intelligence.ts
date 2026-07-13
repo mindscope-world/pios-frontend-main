@@ -105,6 +105,48 @@ export const getMarketTrades = (params: { symbol?: string; exchange?: string; li
 export const getMarketIndicators = (params: { symbol?: string; timeframe?: string; limit?: number } = {}) =>
   apiFetch<Payload>(`/intelligence/market/indicators${buildQuery(params)}`);
 
+export interface Candle {
+  ts: number;
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface OhlcvPayload {
+  symbol: string;
+  timeframe: string;
+  candles: Candle[];
+  fetched_at: string;
+}
+
+// GET /intelligence/market/ohlcv — raw candles, domain-routed the same way
+// as every other live market-data endpoint (OANDA/Alpaca/ccxt). Distinct
+// from getMarketIndicators, which computes-and-discards candles into
+// derived indicators only.
+export const getMarketOhlcv = (params: { symbol: string; timeframe?: string; limit?: number }) =>
+  apiFetch<OhlcvPayload>(`/intelligence/market/ohlcv${buildQuery(params)}`);
+
+export interface AlpacaCryptoSymbol {
+  symbol: string;
+  base: string;
+}
+
+export interface CryptoSymbolsPayload {
+  symbols: AlpacaCryptoSymbol[];
+  count: number;
+  fetched_at: string;
+}
+
+// GET /intelligence/market/crypto-symbols — every crypto currency Alpaca
+// currently lists as tradable (one entry per base asset). Powers the
+// Execution page's symbol switcher so it reflects Alpaca's real listing
+// instead of a hardcoded subset; empty (not an error) without credentials.
+export const getAlpacaCryptoSymbols = () =>
+  apiFetch<CryptoSymbolsPayload>("/intelligence/market/crypto-symbols");
+
 // crypto/forex/stocks are comma-separated symbol lists, NOT a single `symbol`.
 export const getMarketSnapshot = (params: { crypto?: string; forex?: string; stocks?: string } = {}) =>
   apiFetch<Payload>(`/intelligence/market/snapshot${buildQuery(params)}`);
