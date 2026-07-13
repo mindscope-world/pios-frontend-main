@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getBrokerAccount, listBrokers } from "../../api/brokers";
+import { adoptBrokerHolding, getBrokerAccount, getBrokerReconciliation, listBrokers } from "../../api/brokers";
 import type { BrokerOut } from "../../api/types";
 import { getEquityCurve, getPortfolioMetrics, listPositions } from "../../api/positions";
 import { getRiskMetrics } from "../../api/risk";
@@ -128,6 +128,16 @@ export default function PortfolioPage() {
 // {buying_power, equity}, the paper adapter a fixed balance, CCXT a
 // per-asset balances map — so entries render generically.
 function BrokerAccountsCard() {
+  const queryClient = useQueryClient();
+  const adopt = useMutation({
+    mutationFn: ({ brokerId, symbol }: { brokerId: string; symbol: string }) =>
+      adoptBrokerHolding(brokerId, symbol),
+    onSettled: (_d, _e, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["broker-reconciliation", vars.brokerId] });
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-metrics"] });
+    },
+  });
   const brokers = useQuery({
     queryKey: ["brokers-active"],
     queryFn: () => listBrokers({ page_size: 50 }),
@@ -139,6 +149,19 @@ function BrokerAccountsCard() {
     queries: activeBrokers.map((b) => ({
       queryKey: ["broker-account", b.id],
       queryFn: () => getBrokerAccount(b.id),
+      staleTime: 30000,
+      refetchInterval: 60000,
+      retry: 1,
+    })),
+  });
+
+  // Broker↔app holdings reconciliation — only Alpaca reports real broker
+  // positions today; other adapters would produce misleading empty compares.
+  const reconciliations = useQueries({
+    queries: activeBrokers.map((b) => ({
+      queryKey: ["broker-reconciliation", b.id],
+      queryFn: () => getBrokerReconciliation(b.id),
+      enabled: b.broker_type === "ALPACA",
       staleTime: 30000,
       refetchInterval: 60000,
       retry: 1,
@@ -188,6 +211,43 @@ function BrokerAccountsCard() {
                     )}
                   </div>
                 )}
+                {(() => {
+                  const recon = reconciliations[i]?.data;
+                  if (!recon || recon.items.length === 0) return null;
+                  const offItems = recon.items.filter((it) => it.status !== "MATCHED");
+                  return (
+                    <div className="mt-2.5 border-t border-surface-border pt-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[9px] uppercase tracking-[.06em] text-text-faint">Holdings vs app</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[8.5px] uppercase tracking-[.06em] ${recon.in_sync ? "bg-green/10 text-green" : "bg-amber-500/10 text-amber-400"}`}>
+                          {recon.in_sync ? "In sync" : "Drift"}
+                        </span>
+                      </div>
+                      {offItems.length === 0 ? (
+                        <p className="text-[10.5px] text-text-muted">All {recon.items.length} holding(s) match app positions.</p>
+                      ) : (
+                        offItems.map((it) => (
+                          <div key={it.symbol} className="flex items-center justify-between gap-2 text-[10.5px]" title={recon.note}>
+                            <span className="text-text-faint">{it.symbol} · {it.status.toLowerCase().replace("_", " ")}</span>
+                            <span className="flex items-center gap-1.5 text-text-primary">
+                              broker {it.broker_qty.toLocaleString(undefined, { maximumFractionDigits: 8 })} / app {it.app_qty.toLocaleString(undefined, { maximumFractionDigits: 8 })}
+                              {it.broker_qty !== 0 && (
+                                <button
+                                  className="rounded border border-surface-border px-1.5 py-0.5 text-[8.5px] uppercase tracking-[.05em] text-text-faint hover:text-text-primary disabled:opacity-50"
+                                  disabled={adopt.isPending}
+                                  title="Import this broker holding into your app positions (sets app position to the broker's qty and avg entry — audited)"
+                                  onClick={() => adopt.mutate({ brokerId: b.id, symbol: it.symbol })}
+                                >
+                                  {adopt.isPending ? "…" : "Adopt"}
+                                </button>
+                              )}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}

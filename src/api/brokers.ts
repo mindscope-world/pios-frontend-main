@@ -43,3 +43,39 @@ export function testBroker(brokerId: string) {
 export function getBrokerAccount(brokerId: string) {
   return apiFetch<Record<string, unknown>>(`/brokers/${brokerId}/account`);
 }
+
+export interface BrokerReconciliationItem {
+  symbol: string;
+  broker_qty: number;
+  app_qty: number;
+  drift_qty: number;
+  status: "MATCHED" | "DRIFT" | "BROKER_ONLY" | "APP_ONLY";
+}
+
+export interface BrokerReconciliation {
+  broker_id: string;
+  in_sync: boolean;
+  items: BrokerReconciliationItem[];
+  note: string;
+  generated_at: string;
+}
+
+export function getBrokerReconciliation(brokerId: string) {
+  return apiFetch<BrokerReconciliation>(`/brokers/${brokerId}/reconciliation`);
+}
+
+export interface AdoptHoldingResult {
+  adopted: boolean;
+  symbol: string;
+  side: string;
+  qty: number;
+  avg_cost: number;
+  adopted_at: string;
+}
+
+export function adoptBrokerHolding(brokerId: string, symbol: string) {
+  return apiFetch<AdoptHoldingResult>(`/brokers/${brokerId}/reconciliation/adopt`, {
+    method: "POST",
+    body: JSON.stringify({ symbol }),
+  });
+}
