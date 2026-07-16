@@ -74,7 +74,17 @@ export function isTerminalOrderStatus(status: OrderStatus): boolean {
   return TERMINAL_ORDER_STATUSES.has(status);
 }
 
-export type ExecutionStyle = "INSTANT" | "ALGORITHMIC";
+export type ExecutionStyle = "INSTANT" | "ALGORITHMIC" | "CONDITIONAL";
+
+// Order types armed app-side and fired by the backend's trigger monitor —
+// mirrors app/schemas/all_schemas.py's _CONDITIONAL_ORDER_TYPES exactly.
+// STOP_LIMIT rests until its stop crosses, then executes as a LIMIT; OCO is
+// two linked legs (limit + stop) where one filling cancels the other.
+export const CONDITIONAL_ORDER_TYPES: ReadonlySet<OrderType> = new Set(["STOP_LIMIT", "OCO"]);
+
+export function isConditionalOrderType(orderType: OrderType): boolean {
+  return CONDITIONAL_ORDER_TYPES.has(orderType);
+}
 
 export function isAlgorithmicOrderType(orderType: OrderType): boolean {
   return ALGORITHMIC_ORDER_TYPES.has(orderType);
@@ -111,6 +121,7 @@ export interface OrderOut {
   qty: number;
   filled_qty: number;
   price: number | null;
+  stop_price: number | null;
   avg_fill_price: number | null;
   status: OrderStatus;
   state_history: OrderStateEvent[];
@@ -120,7 +131,8 @@ export interface OrderOut {
   filled_at: string | null;
   created_at: string;
   // computed_field on the backend — "ALGORITHMIC" for TWAP/VWAP/ICEBERG,
-  // "INSTANT" otherwise. Show this on every order row.
+  // "CONDITIONAL" for STOP_LIMIT/OCO (armed, fires on trigger), "INSTANT"
+  // otherwise. Show this on every order row.
   execution_style: ExecutionStyle;
 }
 

@@ -5,7 +5,7 @@ import { createOrder } from "../../api/orders";
 import { ApiError } from "../../api/client";
 import { useExecutionModeStore } from "../../stores/executionModeStore";
 import { useAuthStore } from "../../stores/authStore";
-import { isAlgorithmicOrderType, type OrderSide, type OrderType } from "../../api/types";
+import { isAlgorithmicOrderType, isConditionalOrderType, type OrderSide, type OrderType } from "../../api/types";
 
 // POST /orders is require_trade_exec (admin + trader only) server-side —
 // don't show a live-looking BUY/SELL ticket to viewer/compliance/quant that
@@ -61,11 +61,11 @@ export function ModeActions({
   );
 }
 
-// Ticket-supported order types. STOP_LIMIT/OCO exist server-side but have no
-// distinct execution semantics yet (they instant-fill like MARKET) and need a
-// richer form (two prices / linked legs) — deliberately left out of the
-// manual ticket until the backend gives them real behavior.
-const TICKET_ORDER_TYPES: OrderType[] = ["MARKET", "LIMIT", "STOP", "TWAP", "VWAP", "ICEBERG"];
+// Ticket-supported order types — all eight now have real backend semantics:
+// MARKET/LIMIT/STOP single-shot, TWAP/VWAP/ICEBERG background slicing, and
+// STOP_LIMIT/OCO armed app-side and fired by the trigger monitor
+// (app/services/conditional_orders.py).
+const TICKET_ORDER_TYPES: OrderType[] = ["MARKET", "LIMIT", "STOP", "STOP_LIMIT", "OCO", "TWAP", "VWAP", "ICEBERG"];
 
 const inputCls =
   "rounded-md border border-surface-border-strong bg-surface-card px-2 py-1 text-[10.5px] text-text-primary outline-none";
@@ -110,6 +110,8 @@ function ManualTicket({
   }, [symbol]);
 
   const isAlgo = isAlgorithmicOrderType(orderType);
+  const isConditional = isConditionalOrderType(orderType);
+  const needsStop = orderType === "STOP" || isConditional;
 
   const submit = useMutation({
     mutationFn: (side: OrderSide) =>
@@ -120,7 +122,7 @@ function ManualTicket({
         order_type: orderType,
         qty: Number(qty),
         price: price !== "" ? Number(price) : null,
-        stop_price: orderType === "STOP" && stopPrice !== "" ? Number(stopPrice) : null,
+        stop_price: needsStop && stopPrice !== "" ? Number(stopPrice) : null,
         algo_config: isAlgo
           ? {
               slices: Number(slices) || 5,
@@ -135,7 +137,11 @@ function ManualTicket({
         text:
           order.execution_style === "ALGORITHMIC"
             ? `${order.side} ${order.order_type} submitted — slicing in background (status ${order.status}). Track it in Orders.`
-            : `${order.side} order submitted — status ${order.status}.`,
+            : order.execution_style === "CONDITIONAL"
+              ? order.order_type === "OCO"
+                ? `${order.side} OCO armed — limit leg at ${order.price}, stop leg at ${stopPrice}; whichever fills cancels the other. Track both legs in Orders.`
+                : `${order.side} STOP_LIMIT armed — triggers at ${stopPrice}, then executes as a LIMIT at ${order.price}. Track it in Orders.`
+              : `${order.side} order submitted — status ${order.status}.`,
       });
       queryClient.invalidateQueries({ queryKey: ["positions"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -157,7 +163,7 @@ function ManualTicket({
   const qtyInvalid = !(Number(qty) > 0);
   const priceRequired = orderType !== "MARKET"; // LIMIT/STOP need it; algo slices fill at it on paper brokers
   const priceInvalid = priceRequired && !(Number(price) > 0);
-  const stopInvalid = orderType === "STOP" && !(Number(stopPrice) > 0);
+  const stopInvalid = needsStop && !(Number(stopPrice) > 0);
   const disabled = !brokerId || submit.isPending || qtyInvalid || priceInvalid || stopInvalid;
 
   return (
@@ -193,7 +199,13 @@ function ManualTicket({
         </label>
         <label className="block">
           <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">
-            {orderType === "LIMIT" ? "Limit price" : orderType === "STOP" ? "Exec price" : "Price"}
+            {orderType === "LIMIT" || orderType === "STOP_LIMIT"
+              ? "Limit price"
+              : orderType === "OCO"
+                ? "Limit-leg price"
+                : orderType === "STOP"
+                  ? "Exec price"
+                  : "Price"}
           </span>
           <input
             value={price}
@@ -206,9 +218,11 @@ function ManualTicket({
             className={`w-full ${inputCls} text-right`}
           />
         </label>
-        {orderType === "STOP" && (
+        {needsStop && (
           <label className="col-span-2 block">
-            <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">Stop trigger price</span>
+            <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">
+              {orderType === "OCO" ? "Stop-leg trigger price" : "Stop trigger price"}
+            </span>
             <input
               value={stopPrice}
               onChange={(e) => setStopPrice(e.target.value)}
@@ -218,6 +232,14 @@ function ManualTicket({
           </label>
         )}
       </div>
+
+      {isConditional && (
+        <p className="mb-2 text-[9.5px] leading-relaxed text-text-ghost">
+          {orderType === "OCO"
+            ? "Arms two linked legs: a LIMIT at the limit-leg price and a stop at the trigger — whichever fills first cancels the other."
+            : "Rests until the market crosses the stop trigger, then executes as a LIMIT at the limit price."}
+        </p>
+      )}
 
       {isAlgo && (
         <div className="mb-2 rounded-md border border-surface-border bg-surface-card p-2">
