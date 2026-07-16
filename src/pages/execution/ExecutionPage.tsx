@@ -16,6 +16,7 @@ import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptySta
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { ModeActions } from "../../components/execution/ModeActions";
 import { PriceChart } from "../../components/execution/PriceChart";
+import { SymbolPickerModal } from "../../components/execution/SymbolPickerModal";
 import { useChannelSocket } from "../../realtime/useChannelSocket";
 import {
   useMarketStream,
@@ -24,12 +25,30 @@ import {
   type MarketWhyNotTradeEvent,
 } from "../../realtime/useMarketStream";
 
-// Crypto chips are the full Alpaca-supported currency list, fetched live
+// Crypto pairs are the full Alpaca-supported currency list, fetched live
 // (see getAlpacaCryptoSymbols) so this always matches Alpaca's real listing
 // rather than a hardcoded subset; this fallback covers the brief window
 // before that loads (or the rare case Alpaca credentials aren't configured).
 const DEFAULT_CRYPTO_SYMBOLS = ["BTC/USDT"];
-const FOREX_SYMBOLS = ["EUR/USD", "XAU/USD"];
+// Fiat/metal pairs route to OANDA for live data (any fiat/metal pair works —
+// see _is_forex_symbol in market_data_service.py), so the picker offers the
+// majors + metals. Pairs without a `symbols` DB row get live price/chart/
+// orderbook but show the honest "waiting for the intelligence worker" state
+// on the decision panel — same boundary behavior as unlisted crypto pairs.
+const FOREX_METAL_SYMBOLS = [
+  "EUR/USD",
+  "GBP/USD",
+  "USD/JPY",
+  "USD/CHF",
+  "AUD/USD",
+  "USD/CAD",
+  "NZD/USD",
+  "EUR/GBP",
+  "EUR/JPY",
+  "GBP/JPY",
+  "XAU/USD",
+  "XAG/USD",
+];
 
 // Narrowed against command_center_service.py's real return dict — see
 // api/intelligence.ts's note on why these payloads stay loosely typed at
@@ -67,6 +86,7 @@ function normalizeSym(s: string): string {
 
 export default function ExecutionPage() {
   const [symbol, setSymbol] = useState(DEFAULT_CRYPTO_SYMBOLS[0]);
+  const [picker, setPicker] = useState<"crypto" | "forex" | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -78,10 +98,10 @@ export default function ExecutionPage() {
     queryFn: getAlpacaCryptoSymbols,
     staleTime: 60 * 60 * 1000,
   });
-  const SYMBOLS = [
-    ...(cryptoSymbols.data?.symbols.length ? cryptoSymbols.data.symbols.map((s) => s.symbol) : DEFAULT_CRYPTO_SYMBOLS),
-    ...FOREX_SYMBOLS,
-  ];
+  const CRYPTO_SYMBOLS = cryptoSymbols.data?.symbols.length
+    ? cryptoSymbols.data.symbols.map((s) => s.symbol)
+    : DEFAULT_CRYPTO_SYMBOLS;
+  const SYMBOLS = [...CRYPTO_SYMBOLS, ...FOREX_METAL_SYMBOLS];
 
   const commandCenter = useCachedIntelligence(["command-center", symbol], () => getCommandCenter(symbol));
   const whyNotTrade = useCachedIntelligence(["why-not-trade", symbol], () => getWhyNotTrade(symbol));
@@ -177,31 +197,42 @@ export default function ExecutionPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="flex max-h-[74px] max-w-[640px] flex-wrap gap-1.5 overflow-y-auto pr-1">
-          {SYMBOLS.map((s) => {
-            const snap = snapshotFor(s);
-            return (
-              <button
-                key={s}
-                onClick={() => setSymbol(s)}
-                className={`rounded-md border px-3.5 py-1.5 text-[11.5px] ${
-                  s === symbol ? "border-blue-border bg-blue-bg font-bold text-blue" : "border-surface-border-strong text-text-faint"
-                }`}
-              >
-                {s}
-                {snap && (
-                  <span className="ml-1.5 font-mono text-[9.5px] font-normal">
-                    {snap.price.toLocaleString()}{" "}
-                    <span className={snap.change_pct >= 0 ? "text-green" : "text-red"}>
-                      {snap.change_pct >= 0 ? "+" : ""}
-                      {snap.change_pct}%
-                    </span>
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-md border border-blue-border bg-blue-bg px-3.5 py-1.5 text-[11.5px] font-bold text-blue">
+            {symbol}
+            {snapshotFor(symbol) && (
+              <span className="ml-1.5 font-mono text-[9.5px] font-normal">
+                {snapshotFor(symbol)!.price.toLocaleString()}{" "}
+                <span className={snapshotFor(symbol)!.change_pct >= 0 ? "text-green" : "text-red"}>
+                  {snapshotFor(symbol)!.change_pct >= 0 ? "+" : ""}
+                  {snapshotFor(symbol)!.change_pct}%
+                </span>
+              </span>
+            )}
+          </span>
+          <button
+            onClick={() => setPicker("crypto")}
+            className="rounded-md border border-surface-border-strong px-3.5 py-1.5 text-[11.5px] text-text-faint hover:border-text-faint hover:text-text-primary"
+          >
+            Crypto ▾
+          </button>
+          <button
+            onClick={() => setPicker("forex")}
+            className="rounded-md border border-surface-border-strong px-3.5 py-1.5 text-[11.5px] text-text-faint hover:border-text-faint hover:text-text-primary"
+          >
+            Forex / Metals ▾
+          </button>
         </div>
+        {picker && (
+          <SymbolPickerModal
+            title={picker === "crypto" ? "Select a crypto pair" : "Select a forex / metals pair"}
+            symbols={picker === "crypto" ? CRYPTO_SYMBOLS : FOREX_METAL_SYMBOLS}
+            selected={symbol}
+            onSelect={setSymbol}
+            onClose={() => setPicker(null)}
+            snapshotFor={snapshotFor}
+          />
+        )}
         <div className="flex gap-5">
           <PerfItem label="Win rate" value={<NullableNumber value={portfolioMetrics.data?.win_rate ?? null} suffix="%" />} tone="green" />
           <PerfItem label="Sharpe" value={<NullableNumber value={portfolioMetrics.data?.sharpe ?? null} />} tone="amber" />

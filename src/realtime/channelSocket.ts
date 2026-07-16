@@ -32,7 +32,13 @@ export type ChannelMessage = Record<string, unknown> & {
 
 type Listener = (message: ChannelMessage) => void;
 
-const WS_ROOT = `${import.meta.env.VITE_WS_BASE_URL as string}/api/v1/ws`;
+// Empty/unset VITE_WS_BASE_URL = same-origin: derive ws(s)://host from the
+// page location (the Vite /api proxy forwards WebSocket upgrades, ws: true),
+// so localhost and public tunnels both work without per-tunnel .env edits.
+const WS_BASE =
+  (import.meta.env.VITE_WS_BASE_URL as string | undefined) ||
+  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+const WS_ROOT = `${WS_BASE}/api/v1/ws`;
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000, 30000];
 const PING_INTERVAL_MS = 20000;
 

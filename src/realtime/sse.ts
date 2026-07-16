@@ -12,7 +12,9 @@ import { refreshOnce } from "../api/client";
 // cannot authenticate to either stream at all — this hand-rolled
 // fetch + ReadableStream client is required, not a stylistic choice.
 
-const API_ROOT = `${import.meta.env.VITE_API_BASE_URL as string}/api/v1`;
+// Empty/unset VITE_API_BASE_URL = same-origin via the Vite /api proxy (see
+// api/client.ts) — fetch() resolves the relative URL against the page origin.
+const API_ROOT = `${(import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ""}/api/v1`;
 const RECONNECT_DELAY_MS = 2000;
 const AUTH_FAILURE_RETRY_DELAY_MS = 4000;
 

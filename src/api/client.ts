@@ -2,7 +2,10 @@ import { useAuthStore, getStoredRefreshToken } from "../stores/authStore";
 import type { TokenPair } from "./types";
 
 // Backend mounts the router at /api/v1 (main.py:72), on port 9000 (Dockerfile).
-const API_ROOT = `${import.meta.env.VITE_API_BASE_URL as string}/api/v1`;
+// An empty/unset VITE_API_BASE_URL means same-origin: the Vite dev proxy (and
+// any tunnel in front of it) forwards /api to the backend, so the app works on
+// localhost and on a public tunnel without re-editing .env.local per tunnel.
+const API_ROOT = `${(import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ""}/api/v1`;
 
 export class ApiError extends Error {
   status: number;
