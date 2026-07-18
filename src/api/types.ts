@@ -233,7 +233,7 @@ export type BrokerType = "MT5" | "IBKR" | "ALPACA" | "OANDA" | "CCXT" | "LMAX" |
 // as a bridge token. Live trading works once that EA is paired; until then
 // orders fail fast with a clear "EA not connected" rejection rather than a
 // silent paper fill.
-export const REAL_BROKER_TYPES: ReadonlySet<BrokerType> = new Set(["ALPACA", "BINANCE", "CCXT", "MT5"]);
+export const REAL_BROKER_TYPES: ReadonlySet<BrokerType> = new Set(["ALPACA", "BINANCE", "CCXT", "MT5", "OANDA"]);
 
 export function supportsLiveTrading(brokerType: BrokerType): boolean {
   return REAL_BROKER_TYPES.has(brokerType);
