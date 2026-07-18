@@ -99,8 +99,9 @@ function ManualTicket({
   }, [activeBrokers.length]);
 
   // Prefill (and keep prefilled) from the live tick until the trader types a
-  // price themselves. PaperAdapter fills at `order.price or 0`, so a blank
-  // price means a $0 fill and a useless TCA row — prefill prevents that trap.
+  // price themselves. PaperAdapter now resolves a blank price from the live
+  // ticker (and rejects if none exists), but prefilling still shows the
+  // trader the expected fill and seeds LIMIT/STOP with a sane level.
   const [priceTouched, setPriceTouched] = useState(false);
   useEffect(() => {
     if (!priceTouched && referencePrice != null) setPrice(String(referencePrice));
@@ -132,6 +133,16 @@ function ManualTicket({
           : null,
       }),
     onSuccess: (order) => {
+      if (order.status === "REJECTED") {
+        // The API returns 200 with a REJECTED order (broker-side rejections
+        // like "market closed" land here, not in onError) — surface the why.
+        setFeedback({
+          tone: "err",
+          text: `${order.side} order REJECTED — ${order.reject_reason ?? "no reason reported by the broker"}`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        return;
+      }
       setFeedback({
         tone: "ok",
         text:
