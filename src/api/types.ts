@@ -103,6 +103,16 @@ export interface OrderCreatePayload {
   algo_config?: Record<string, unknown> | null;
 }
 
+// Semi-auto confirm (§3.1) — mirrors app/schemas/all_schemas.py's
+// ConfirmDecisionRequest exactly: deliberately minimal, everything about
+// the order's actual terms (side, qty, whether it's even allowed to fire)
+// is re-derived server-side from the live decision, not trusted from here.
+export interface ConfirmDecisionPayload {
+  symbol: string;
+  broker_id: string;
+  client_order_id?: string | null;
+}
+
 export interface OrderStateEvent {
   from: string | null;
   to: string;

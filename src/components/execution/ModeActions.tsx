@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listBrokers } from "../../api/brokers";
-import { createOrder } from "../../api/orders";
+import { createOrder, confirmDecision } from "../../api/orders";
 import { ApiError } from "../../api/client";
 import { useExecutionModeStore } from "../../stores/executionModeStore";
 import { useAuthStore } from "../../stores/authStore";
 import { isAlgorithmicOrderType, isConditionalOrderType, type OrderSide, type OrderType } from "../../api/types";
+
+// Same regime->direction proxy as the backend's prs_service.REGIME_DIRECTION
+// (and confirm_decision, which is the actual source of truth server-side —
+// this copy is display-only, so the button's enabled state matches what the
+// backend will decide, but the backend re-derives it independently rather
+// than trusting this).
+const REGIME_DIRECTION_DISPLAY: Record<string, "LONG" | "SHORT"> = { BULL: "LONG", BEAR: "SHORT" };
 
 // POST /orders is require_trade_exec (admin + trader only) server-side —
 // don't show a live-looking BUY/SELL ticket to viewer/compliance/quant that
@@ -23,10 +30,14 @@ export function ModeActions({
   symbol,
   suggestedQty,
   referencePrice,
+  decision,
+  regimeLabel,
 }: {
   symbol: string;
   suggestedQty: number | null;
   referencePrice?: number | null;
+  decision?: "ALLOW" | "BLOCK" | "WAIT" | "REDUCE";
+  regimeLabel?: string | null;
 }) {
   const mode = useExecutionModeStore((s) => s.mode);
   const role = useAuthStore((s) => s.user?.role);
@@ -43,15 +54,14 @@ export function ModeActions({
     return <ManualTicket symbol={symbol} suggestedQty={suggestedQty} referencePrice={referencePrice ?? null} />;
   }
   if (mode === "semi") {
-    return (
-      <div className="rounded-lg border border-surface-border-strong bg-surface-overlay p-3">
-        <div className="mb-1 text-[11px] font-bold text-text-muted">Semi-auto not available</div>
-        <div className="text-[10px] leading-relaxed text-text-faint">
-          There is no autonomous execution engine in this build — Pi-OSQ cannot enter trades on its own yet. Use
-          Manual mode to place orders. This mode is tracked as a future backend feature.
+    if (!canTrade) {
+      return (
+        <div className="rounded-lg border border-dashed border-surface-border-strong p-3 text-[11px] text-text-faint">
+          Order submission is restricted to trader/admin roles — this account ({role}) has view-only access here.
         </div>
-      </div>
-    );
+      );
+    }
+    return <SemiAutoConfirm symbol={symbol} decision={decision} regimeLabel={regimeLabel ?? null} />;
   }
   return (
     <div className="rounded-lg border border-blue-border bg-blue-bg p-3 text-center">
@@ -70,6 +80,112 @@ const TICKET_ORDER_TYPES: OrderType[] = ["MARKET", "LIMIT", "STOP", "STOP_LIMIT"
 const inputCls =
   "rounded-md border border-surface-border-strong bg-surface-card px-2 py-1 text-[10.5px] text-text-primary outline-none";
 
+// Semi-auto (§3.1, labeled MVP): one click confirms the *current live*
+// decision, restricted to MT5 brokers (the suggested size is
+// lot-denominated — see order_service.confirm_decision for why that
+// can't be generalized to other brokers' unit conventions without
+// inventing a conversion). The button is inert unless decision === ALLOW
+// and the regime gives a directional bias — this mirrors, but does not
+// replace, the backend's own re-derivation: what's shown here is a
+// preview of what confirm-decision will do, not the source of truth.
+function SemiAutoConfirm({
+  symbol,
+  decision,
+  regimeLabel,
+}: {
+  symbol: string;
+  decision?: "ALLOW" | "BLOCK" | "WAIT" | "REDUCE";
+  regimeLabel: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const brokers = useQuery({ queryKey: ["brokers", "picker"], queryFn: () => listBrokers({ page_size: 50 }) });
+  const mt5Brokers = (brokers.data?.items ?? []).filter((b) => b.is_active && b.broker_type === "MT5");
+
+  const [brokerId, setBrokerId] = useState("");
+  const [feedback, setFeedback] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    setFeedback(null);
+    // Deliberately do NOT auto-select a broker here — confirm always
+    // requires the trader to explicitly pick which broker gets the order.
+  }, [symbol]);
+
+  const direction = regimeLabel ? REGIME_DIRECTION_DISPLAY[regimeLabel] : undefined;
+  const impliedSide: OrderSide | null = direction === "LONG" ? "BUY" : direction === "SHORT" ? "SELL" : null;
+
+  const confirm = useMutation({
+    mutationFn: () => confirmDecision({ symbol, broker_id: brokerId }),
+    onSuccess: (order) => {
+      if (order.status === "REJECTED") {
+        setFeedback({ tone: "err", text: `${order.side} order REJECTED — ${order.reject_reason ?? "no reason reported by the broker"}` });
+      } else {
+        setFeedback({ tone: "ok", text: `${order.side} order submitted — status ${order.status}, qty ${order.qty}.` });
+      }
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+    onError: (err) => {
+      const detail = err instanceof ApiError ? (err.body as { detail?: string } | null)?.detail ?? err.message : "Confirm failed.";
+      setFeedback({ tone: "err", text: detail });
+    },
+  });
+
+  if (!brokers.isPending && mt5Brokers.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-surface-border-strong p-3 text-[11px] text-text-faint">
+        Semi-auto confirm needs an active MT5 broker connection — the suggested size is lot-denominated and only
+        has a defined meaning for MT5 today. Add one in Connections, or use Manual mode for other brokers.
+      </div>
+    );
+  }
+
+  const blockedReason =
+    decision !== "ALLOW"
+      ? `Decision is ${decision ?? "unknown"}, not ALLOW — nothing to confirm.`
+      : !impliedSide
+        ? `Regime ${regimeLabel ?? "unknown"} gives no directional bias — nothing to confirm.`
+        : !brokerId
+          ? "Pick a broker to confirm against."
+          : null;
+
+  return (
+    <div className="rounded-lg border border-surface-border-strong bg-surface-overlay p-3">
+      <div className="mb-2 text-[10px] leading-relaxed text-text-faint">
+        Confirms the <em>current live</em> decision, re-derived server-side at the moment you click — not whatever
+        was last rendered here. {impliedSide ? (
+          <>Implied side: <span className="font-bold text-text-primary">{impliedSide}</span> (regime {regimeLabel} → {direction}-biased).</>
+        ) : (
+          <>No directional bias from the current regime ({regimeLabel ?? "unknown"}).</>
+        )}
+      </div>
+
+      <label className="mb-2 block">
+        <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">Broker (MT5 only)</span>
+        <select value={brokerId} onChange={(e) => setBrokerId(e.target.value)} className={`w-full ${inputCls}`}>
+          <option value="">Select a broker…</option>
+          {mt5Brokers.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <button
+        disabled={!!blockedReason || confirm.isPending}
+        onClick={() => confirm.mutate()}
+        className={`w-full rounded-lg border py-2 text-xs font-extrabold tracking-[.04em] disabled:opacity-50 ${
+          impliedSide === "SELL" ? "border-red-border bg-red-bg text-red" : "border-green-border bg-green-bg text-green"
+        }`}
+      >
+        {confirm.isPending ? "Confirming…" : impliedSide ? `Confirm ${impliedSide}` : "Confirm"}
+      </button>
+      {blockedReason && <p className="mt-1.5 text-[10px] text-text-ghost">{blockedReason}</p>}
+      {feedback && <p className={`mt-2 text-[10.5px] ${feedback.tone === "ok" ? "text-green" : "text-red"}`}>{feedback.text}</p>}
+    </div>
+  );
+}
+
 function ManualTicket({
   symbol,
   suggestedQty,
@@ -85,7 +201,7 @@ function ManualTicket({
 
   const [brokerId, setBrokerId] = useState("");
   const [orderType, setOrderType] = useState<OrderType>("MARKET");
-  const [qty, setQty] = useState(suggestedQty ? String(suggestedQty) : "0.01");
+  const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
   const [stopPrice, setStopPrice] = useState("");
   const [slices, setSlices] = useState("5");
@@ -108,6 +224,24 @@ function ManualTicket({
   }, [referencePrice, priceTouched]);
   useEffect(() => {
     setPriceTouched(false);
+  }, [symbol]);
+
+  // suggestedQty (final_size_lot) is an MT5-lot-denominated risk-sizing
+  // number, not a broker-agnostic quantity — feeding it straight into a
+  // non-MT5 broker's qty field submits nonsense (e.g. 0.075592 "units" on
+  // OANDA, which needs whole base-currency units). Only auto-fill it for
+  // MT5 brokers; every other broker type starts blank so the trader enters
+  // a real quantity in that broker's own units.
+  const selectedBroker = activeBrokers.find((b) => b.id === brokerId);
+  const isLotBased = selectedBroker?.broker_type === "MT5";
+  const qtyUnitLabel = !selectedBroker ? "qty" : isLotBased ? "lots" : selectedBroker.broker_type === "OANDA" ? "units" : "qty";
+  const [qtyTouched, setQtyTouched] = useState(false);
+  useEffect(() => {
+    if (qtyTouched) return;
+    setQty(isLotBased && suggestedQty ? String(suggestedQty) : "");
+  }, [isLotBased, suggestedQty, qtyTouched]);
+  useEffect(() => {
+    setQtyTouched(false);
   }, [symbol]);
 
   const isAlgo = isAlgorithmicOrderType(orderType);
@@ -205,8 +339,17 @@ function ManualTicket({
 
       <div className="mb-2 grid grid-cols-2 gap-1.5">
         <label className="block">
-          <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">Qty</span>
-          <input value={qty} onChange={(e) => setQty(e.target.value)} inputMode="decimal" className={`w-full ${inputCls} text-right`} />
+          <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">Qty ({qtyUnitLabel})</span>
+          <input
+            value={qty}
+            onChange={(e) => {
+              setQty(e.target.value);
+              setQtyTouched(true);
+            }}
+            inputMode="decimal"
+            placeholder={isLotBased ? "0.01" : "0"}
+            className={`w-full ${inputCls} text-right`}
+          />
         </label>
         <label className="block">
           <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">

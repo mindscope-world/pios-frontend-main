@@ -2,16 +2,15 @@ import { create } from "zustand";
 
 export type ExecutionMode = "manual" | "semi" | "automatic";
 
-// Manual is the only mode with a real backend behind it today: every order
-// is user-initiated via POST /orders (see api/orders.ts). There is no
-// autonomous order-submission engine, so semi/automatic have nothing to
-// execute against yet — the UI still offers the switch (per the client
-// design) but renders an honest "not available" state instead of simulating
-// trade activity. Tracked as a future backend feature in
-// pios-backend-main/development-priorities.md.
+// Manual: user-initiated via POST /orders. Semi: one-click "confirm the
+// live decision" via POST /orders/confirm-decision (§3.1) — the backend
+// re-derives side/qty/eligibility server-side, so this is real order
+// submission, not a simulation; see order_service.confirm_decision for the
+// exact (labeled-MVP) rules it fires under. Automatic still has no
+// autonomous execution engine — nothing changed there.
 export const MODE_HAS_BACKEND: Record<ExecutionMode, boolean> = {
   manual: true,
-  semi: false,
+  semi: true,
   automatic: false,
 };
 

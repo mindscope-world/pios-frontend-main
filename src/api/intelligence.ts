@@ -164,6 +164,26 @@ export interface RejectionStat {
 
 export const getRejectionStats = () => apiFetch<RejectionStat[]>("/intelligence/rejection-stats");
 
+// GET /intelligence/calibration-digest (§3.3) — mirrors
+// calibration_service.py's return dict exactly. eligible/non_eligible are
+// system-wide QuantDecision counts (the worker's decisions, not yours);
+// orders_placed_by_you is your own activity in the same window. No causal
+// link exists between a specific decision and a specific order in this
+// codebase, so approx_activity_ratio is an approximate correlate, not a
+// true taken-vs-skipped rate — see the API's own `note` field.
+export interface CalibrationDigest {
+  window_hours: number;
+  eligible_setups: number;
+  non_eligible_setups: number;
+  orders_placed_by_you: number;
+  eligible_setups_by_symbol_id: Record<string, number>;
+  approx_activity_ratio: number | null;
+  note: string;
+}
+
+export const getCalibrationDigest = (hours = 24) =>
+  apiFetch<CalibrationDigest>(`/intelligence/calibration-digest${buildQuery({ hours })}`);
+
 // GET /intelligence/notifications/latest — polling snapshot of constraint
 // severity across the most active symbols (distinct from the SSE
 // /notifications/stream, which pushes events as they happen). Used to seed

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  getCalibrationDigest,
   getDecisionCurrent,
   getDecisionFeed,
   getRejectionStats,
@@ -119,6 +120,12 @@ export function OverviewTab({ symbol }: { symbol?: string }) {
   const rejectionStats = useQuery({
     queryKey: ["rejection-stats"],
     queryFn: getRejectionStats,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+  });
+  const calibrationDigest = useQuery({
+    queryKey: ["calibration-digest"],
+    queryFn: () => getCalibrationDigest(24),
     staleTime: 60000,
     refetchOnWindowFocus: false,
   });
@@ -364,9 +371,37 @@ export function OverviewTab({ symbol }: { symbol?: string }) {
           )}
           <p className="mt-3 text-[10px] leading-relaxed text-text-ghost">
             Your rejected orders grouped by reason, plus P1/P2 risk alerts by category (GET
-            /intelligence/rejection-stats). The fuller "eligible setups taken vs. skipped" digest still needs a
-            dedicated backend aggregation — this is the real slice of it that exists today.
+            /intelligence/rejection-stats).
           </p>
+
+          <div className="mt-3 border-t border-surface-border pt-3">
+            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[.06em] text-text-faint">
+              Eligible setups vs. your activity (24h)
+            </div>
+            {calibrationDigest.isPending ? (
+              <p className="text-sm text-text-muted">Loading…</p>
+            ) : calibrationDigest.data ? (
+              <>
+                <div className="flex items-center gap-4 text-[11px]">
+                  <span>
+                    <span className="font-mono font-semibold text-text-primary">{calibrationDigest.data.eligible_setups}</span>{" "}
+                    <span className="text-text-faint">eligible (ALLOW)</span>
+                  </span>
+                  <span>
+                    <span className="font-mono font-semibold text-text-primary">{calibrationDigest.data.non_eligible_setups}</span>{" "}
+                    <span className="text-text-faint">skipped (BLOCK/WAIT/REDUCE)</span>
+                  </span>
+                  <span>
+                    <span className="font-mono font-semibold text-text-primary">{calibrationDigest.data.orders_placed_by_you}</span>{" "}
+                    <span className="text-text-faint">orders placed by you</span>
+                  </span>
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-text-ghost">{calibrationDigest.data.note}</p>
+              </>
+            ) : (
+              <p className="text-sm text-text-muted">No calibration digest available.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

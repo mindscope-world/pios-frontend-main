@@ -1,6 +1,7 @@
 import { apiFetch } from "./client";
 import type {
   CancelOrderResponse,
+  ConfirmDecisionPayload,
   FillOut,
   OrderCreatePayload,
   OrderOut,
@@ -10,6 +11,16 @@ import type {
 
 export function createOrder(payload: OrderCreatePayload) {
   return apiFetch<OrderOut>("/orders", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// Semi-auto (§3.1) — POST /orders/confirm-decision. Only symbol + broker_id
+// go over the wire; the backend re-derives side/qty/eligibility from the
+// live decision itself (see order_service.confirm_decision).
+export function confirmDecision(payload: ConfirmDecisionPayload) {
+  return apiFetch<OrderOut>("/orders/confirm-decision", {
     method: "POST",
     body: JSON.stringify(payload),
   });

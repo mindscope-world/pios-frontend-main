@@ -367,6 +367,8 @@ export default function ExecutionPage() {
                   symbol={symbol}
                   suggestedQty={cc.final_size_lot}
                   referencePrice={livePrice?.price ?? cc.live_market?.price ?? null}
+                  decision={cc.decision}
+                  regimeLabel={cc.regime?.label ?? null}
                 />
               </>
             ) : commandCenter.isPending ? (
