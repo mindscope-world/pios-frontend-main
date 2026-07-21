@@ -11,6 +11,7 @@ import OrderDetailPage from "./pages/orders/OrderDetailPage";
 import PortfolioPage from "./pages/portfolio/PortfolioPage";
 import StrategiesPage from "./pages/strategies/StrategiesPage";
 import StrategyDetailPage from "./pages/strategies/StrategyDetailPage";
+import BacktestPage from "./pages/backtest/BacktestPage";
 import RiskPage from "./pages/risk/RiskPage";
 import ConnectionsPage from "./pages/connections/ConnectionsPage";
 import IntelligencePage from "./pages/intelligence/IntelligencePage";
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
           { path: "/positions", element: <Navigate to="/portfolio" replace /> },
           { path: "/strategies", element: <StrategiesPage /> },
           { path: "/strategies/:strategyId", element: <StrategyDetailPage /> },
+          { path: "/backtest", element: <BacktestPage /> },
           { path: "/risk", element: <RiskPage /> },
           { path: "/alerts", element: <AlertsPage /> },
           { path: "/connections", element: <ConnectionsPage /> },

@@ -36,6 +36,11 @@ export function gateRequirement(stage: LifecycleStage): string | null {
   return null;
 }
 
+// V10.4 D.2 — mirrors app/schemas/all_schemas.py AlphaClock. Stored in
+// Strategy.config.alpha_clock (JSONB, no dedicated column); ClockWeightBand
+// rows (see api/clockBands.ts) clamp per-clock capital exposure by regime.
+export type AlphaClock = "SHORT_FLOW" | "MEDIUM_TREND" | "LONG_MACRO";
+
 export interface GateHistoryEntry {
   from: string;
   to: string;
@@ -66,6 +71,7 @@ export interface StrategyOut {
   retired_at: string | null;
   retirement_reason: string | null;
   created_at: string;
+  alpha_clock: AlphaClock | null;
 }
 
 export interface StrategyCreatePayload {
@@ -73,6 +79,7 @@ export interface StrategyCreatePayload {
   hypothesis?: string | null;
   description?: string | null;
   tags?: string[] | null;
+  alpha_clock?: AlphaClock | null;
 }
 
 export interface StrategyUpdatePayload {
@@ -80,6 +87,7 @@ export interface StrategyUpdatePayload {
   hypothesis?: string;
   description?: string;
   tags?: string[];
+  alpha_clock?: AlphaClock | null;
 }
 
 export type BacktestStatus = "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED";
@@ -90,6 +98,37 @@ export interface BacktestJobCreatePayload {
   end_date: string; // YYYY-MM-DD
   symbols: string[];
   cost_model?: CostModel;
+}
+
+// One walk-forward fold — app/workers/backtest_worker.py's expanding-window
+// train/test split, one HMM regime + GARCH fit per fold on the training
+// slice only. "passed" is the same >= 0.8 Sharpe bar as the PAPER gate.
+export interface WalkForwardFold {
+  fold: number;
+  sharpe: number;
+  regime: string;
+  trades: number;
+  win_rate: number;
+  total_return_pct: number;
+  max_dd: number;
+  passed: boolean;
+}
+
+export interface BacktestFullReport {
+  folds: number[];
+  tick_count: number;
+  vol_engine: string;
+  // "live_ticks" = real accumulated market_ticks history; "synthetic_fallback"
+  // = no ticks existed in the requested date range, so the run is a canned
+  // synthetic price path — not a real result. Surface this prominently: a
+  // backtest can complete and pass the PAPER gate on synthetic data with
+  // nothing in the response distinguishing it unless this field is shown.
+  data_source: "live_ticks" | "synthetic_fallback";
+  monte_carlo: { p5: number | null; p50: number | null; p95: number | null };
+  walk_forward: WalkForwardFold[];
+  cost_analysis: { total_slippage_bps: number; total_commission: number; total_cost_bps: number; cost_model: string };
+  regime_engine: string;
+  regime_breakdown: Record<string, number>;
 }
 
 export interface BacktestJobOut {
@@ -106,6 +145,8 @@ export interface BacktestJobOut {
   trade_count: number | null;
   win_rate: number | null;
   profit_factor: number | null;
+  full_report: BacktestFullReport | null;
+  equity_curve: { day: number; value: number }[] | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;

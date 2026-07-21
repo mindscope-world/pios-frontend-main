@@ -165,19 +165,79 @@ function JobRow({ job }: { job: BacktestJobOut }) {
       )}
 
       {job.status === "COMPLETE" && (
-        <div className="grid grid-cols-3 gap-2.5 md:grid-cols-6">
-          <Metric label="Sharpe" value={<NullableNumber value={job.sharpe_ratio} />} />
-          <Metric label="Max DD" value={job.max_drawdown != null ? `${job.max_drawdown}%` : "—"} />
-          <Metric label="Return" value={job.total_return != null ? `${job.total_return}%` : "—"} />
-          <Metric label="Trades" value={job.trade_count ?? "—"} />
-          <Metric label="Win rate" value={job.win_rate != null ? `${job.win_rate}%` : "—"} />
-          <Metric label="Profit factor" value={<NullableNumber value={job.profit_factor} />} />
-        </div>
+        <>
+          <div className="grid grid-cols-3 gap-2.5 md:grid-cols-6">
+            <Metric label="Sharpe" value={<NullableNumber value={job.sharpe_ratio} />} />
+            <Metric label="Max DD" value={job.max_drawdown != null ? `${job.max_drawdown}%` : "—"} />
+            <Metric label="Return" value={job.total_return != null ? `${job.total_return}%` : "—"} />
+            <Metric label="Trades" value={job.trade_count ?? "—"} />
+            <Metric label="Win rate" value={job.win_rate != null ? `${job.win_rate}%` : "—"} />
+            <Metric label="Profit factor" value={<NullableNumber value={job.profit_factor} />} />
+          </div>
+
+          {job.full_report?.data_source === "synthetic_fallback" && (
+            <p className="mt-2.5 rounded-md border border-amber-border bg-amber-bg p-2 text-[10.5px] text-amber">
+              No real tick history existed for {job.start_date} → {job.end_date} — this result is a synthetic price
+              path, not real market data. Not meaningful for a PAPER-gate decision.
+            </p>
+          )}
+
+          {job.full_report?.walk_forward && job.full_report.walk_forward.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1.5 flex items-center gap-2 text-[10px] uppercase tracking-[.06em] text-text-ghost">
+                <span>Walk-forward folds</span>
+                <span className="normal-case text-text-faint">
+                  {job.full_report.tick_count?.toLocaleString() ?? "?"} ticks · {job.full_report.regime_engine ?? "?"}{" "}
+                  · {job.full_report.vol_engine ?? "?"} ·{" "}
+                  {job.full_report.data_source === "live_ticks" ? "real market data" : "synthetic fallback"}
+                </span>
+              </div>
+              <table className="w-full text-[10.5px]">
+                <thead>
+                  <tr className="text-[9px] uppercase tracking-[.05em] text-text-ghost">
+                    <th className="px-1.5 py-1 text-left">Fold</th>
+                    <th className="px-1.5 py-1 text-left">Regime</th>
+                    <th className="px-1.5 py-1 text-left">Sharpe</th>
+                    <th className="px-1.5 py-1 text-left">Trades</th>
+                    <th className="px-1.5 py-1 text-left">Win rate</th>
+                    <th className="px-1.5 py-1 text-left">Return</th>
+                    <th className="px-1.5 py-1 text-left">Gate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {job.full_report.walk_forward.map((f) => (
+                    <tr key={f.fold} className="border-b border-surface-border last:border-0">
+                      <td className="px-1.5 py-1 font-mono text-text-faint">{f.fold}</td>
+                      <td className="px-1.5 py-1 text-text-faint">{f.regime}</td>
+                      <td className="px-1.5 py-1 font-mono text-text-primary">{f.sharpe}</td>
+                      <td className="px-1.5 py-1 font-mono text-text-faint">{f.trades}</td>
+                      <td className="px-1.5 py-1 font-mono text-text-faint">{(f.win_rate * 100).toFixed(1)}%</td>
+                      <td className="px-1.5 py-1 font-mono text-text-faint">{f.total_return_pct}%</td>
+                      <td className="px-1.5 py-1">
+                        <span className={f.passed ? "text-green" : "text-text-ghost"}>{f.passed ? "PASS" : "—"}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {job.full_report.monte_carlo && (
+                <p className="mt-1.5 text-[10px] text-text-ghost">
+                  Monte Carlo 30d return (p5 / p50 / p95): {fmtPct(job.full_report.monte_carlo.p5)} /{" "}
+                  {fmtPct(job.full_report.monte_carlo.p50)} / {fmtPct(job.full_report.monte_carlo.p95)}
+                </p>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {job.status === "FAILED" && job.error_message && <p className="text-[10.5px] text-red">{job.error_message}</p>}
     </div>
   );
+}
+
+function fmtPct(v: number | null) {
+  return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
 }
 
 function Metric({ label, value }: { label: string; value: React.ReactNode }) {

@@ -311,6 +311,8 @@ export default function StrategyDetailPage() {
         )}
       </div>
 
+      <BacktestPanel strategyId={strategyId} />
+
       <div className="rounded-[10px] border border-surface-border bg-surface-raised">
         <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
           <span className="text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">Details</span>
@@ -389,8 +391,6 @@ export default function StrategyDetailPage() {
           </div>
         )}
       </div>
-
-      <BacktestPanel strategyId={strategyId} />
     </div>
   );
 }

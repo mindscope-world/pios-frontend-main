@@ -46,6 +46,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Reference",
     items: [
       { to: "/strategies", label: "Strategies", icon: "◇" },
+      { to: "/backtest", label: "Backtest", icon: "⟲" },
       { to: "/connections", label: "Connections", icon: "⟁" },
     ],
   },
