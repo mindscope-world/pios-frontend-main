@@ -14,6 +14,7 @@ import { getTickerSnapshots } from "../../api/market";
 import { getPortfolioMetrics, listPositions } from "../../api/positions";
 import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptyState";
 import { NullableNumber } from "../../components/ui/NullableNumber";
+import { formatMoney } from "../../utils/currency";
 import { ModeActions } from "../../components/execution/ModeActions";
 import { PriceChart } from "../../components/execution/PriceChart";
 import { SymbolPickerModal } from "../../components/execution/SymbolPickerModal";
@@ -383,7 +384,7 @@ export default function ExecutionPage() {
             onClick={() => navigate("/portfolio")}
           >
             <Row label="Open positions" value={`${openPositions.length} open`} />
-            <Row label="Unrealized P&L" value={`$${unrealizedTotal.toFixed(2)}`} tone={unrealizedTotal >= 0 ? "pos" : "neg"} last />
+            <Row label="Unrealized P&L" value={`$${formatMoney(unrealizedTotal)}`} tone={unrealizedTotal >= 0 ? "pos" : "neg"} last />
           </div>
 
           <div className="rounded-[10px] border border-surface-border bg-surface-raised p-4">

@@ -7,6 +7,7 @@ import { getEquityCurve, getPortfolioMetrics, listPositions } from "../../api/po
 import { getRiskMetrics } from "../../api/risk";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { useChannelSocket } from "../../realtime/useChannelSocket";
+import { formatMoney } from "../../utils/currency";
 
 export default function PortfolioPage() {
   // GET /positions* is per-trader (user-scoped DB rows), and fills now net
@@ -62,7 +63,7 @@ export default function PortfolioPage() {
                     <td className="px-2.5 py-2.5">{p.avg_cost}</td>
                     <td className="px-2.5 py-2.5">{p.qty}</td>
                     <td className={`px-2.5 py-2.5 font-semibold ${p.unrealized_pnl >= 0 ? "text-green" : "text-red"}`}>
-                      {p.unrealized_pnl.toFixed(2)}
+                      {formatMoney(p.unrealized_pnl)}
                     </td>
                   </tr>
                 ))}
@@ -109,8 +110,8 @@ export default function PortfolioPage() {
             <Metric label="Sharpe" value={<NullableNumber value={metrics.data?.sharpe ?? null} />} />
             <Metric label="Win rate" value={<NullableNumber value={metrics.data?.win_rate ?? null} suffix="%" />} />
             <Metric label="Max drawdown" value={metrics.data ? `${metrics.data.max_drawdown}%` : "—"} />
-            <Metric label="Realized P&L" value={metrics.data ? `$${metrics.data.realized_pnl.toFixed(2)}` : "—"} />
-            <Metric label="Unrealized P&L" value={metrics.data ? `$${metrics.data.unrealized_pnl.toFixed(2)}` : "—"} />
+            <Metric label="Realized P&L" value={metrics.data ? `$${formatMoney(metrics.data.realized_pnl)}` : "—"} />
+            <Metric label="Unrealized P&L" value={metrics.data ? `$${formatMoney(metrics.data.unrealized_pnl)}` : "—"} />
             <Metric label="Active strategies" value={metrics.data ? String(metrics.data.active_strategies) : "—"} />
           </div>
 
