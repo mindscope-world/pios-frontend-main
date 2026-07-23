@@ -233,7 +233,7 @@ export interface PortfolioMetricsOut {
 // ── Brokers — mirrors app/schemas/all_schemas.py BrokerCreate/BrokerOut and
 // app/models/all_models.py:105-114 BrokerType.ALL exactly. ──────────────────
 
-export type BrokerType = "MT5" | "IBKR" | "ALPACA" | "OANDA" | "CCXT" | "LMAX" | "CUSTOM" | "BINANCE";
+export type BrokerType = "MT5" | "IBKR" | "ALPACA" | "OANDA" | "CCXT" | "LMAX" | "CUSTOM" | "BINANCE" | "TRADOVATE";
 
 // app/services/broker_service.py ADAPTER_MAP — the only broker types with a
 // real (non-simulated) adapter. Everything else in BrokerType forces
@@ -243,7 +243,14 @@ export type BrokerType = "MT5" | "IBKR" | "ALPACA" | "OANDA" | "CCXT" | "LMAX" |
 // as a bridge token. Live trading works once that EA is paired; until then
 // orders fail fast with a clear "EA not connected" rejection rather than a
 // silent paper fill.
-export const REAL_BROKER_TYPES: ReadonlySet<BrokerType> = new Set(["ALPACA", "BINANCE", "CCXT", "MT5", "OANDA"]);
+// IBKR/LMAX/TRADOVATE: real adapters exist (2026-07-23) but are scaffolded,
+// not live-verified — no funded/paper account or gateway access exists in
+// this dev environment for any of the three (see Final_development.md §1).
+// Listed here as real (not forced to paper) since the backend adapter code
+// is genuine and will attempt a real connection, honestly failing with
+// whatever the broker/gateway actually reports if misconfigured, rather
+// than silently paper-filling.
+export const REAL_BROKER_TYPES: ReadonlySet<BrokerType> = new Set(["ALPACA", "BINANCE", "CCXT", "MT5", "OANDA", "IBKR", "LMAX", "TRADOVATE"]);
 
 export function supportsLiveTrading(brokerType: BrokerType): boolean {
   return REAL_BROKER_TYPES.has(brokerType);

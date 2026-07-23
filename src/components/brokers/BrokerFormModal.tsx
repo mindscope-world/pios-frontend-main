@@ -4,7 +4,17 @@ import { createBroker } from "../../api/brokers";
 import { ApiError } from "../../api/client";
 import { supportsLiveTrading, type BrokerType } from "../../api/types";
 
-const BROKER_TYPES: BrokerType[] = ["ALPACA", "BINANCE", "CCXT", "IBKR", "OANDA", "LMAX", "MT5", "CUSTOM"];
+const BROKER_TYPES: BrokerType[] = ["ALPACA", "BINANCE", "CCXT", "IBKR", "OANDA", "LMAX", "MT5", "CUSTOM", "TRADOVATE"];
+
+// IBKR/LMAX/TRADOVATE repurpose the generic credential fields for
+// broker-specific identifiers (see broker_service.py's IBKRAdapter /
+// LMAXAdapter / TradovateAdapter docstrings for the exact mapping) — these
+// adapters are scaffolded and not live-verified (2026-07-23), so the labels
+// here matter for whoever tests them for real first.
+const CREDENTIAL_LABELS: Partial<Record<BrokerType, { apiKey: string; apiSecret: string; accountId: string; passphrase: string }>> = {
+  LMAX: { apiKey: "SenderCompID", apiSecret: "Password (optional)", accountId: "Account", passphrase: "TargetCompID (LMAX-assigned)" },
+  TRADOVATE: { apiKey: "Username", apiSecret: "Password", accountId: "Account id (numeric)", passphrase: "API secret (\"sec\")" },
+};
 
 /**
  * POST /brokers. Only ALPACA/BINANCE/CCXT/MT5 have a real adapter
@@ -122,24 +132,33 @@ export function BrokerFormModal({ onClose }: { onClose: () => void }) {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <LabeledInput label="API key" value={apiKey} onChange={setApiKey} type="password" />
-            <LabeledInput label="API secret" value={apiSecret} onChange={setApiSecret} type="password" />
-            <LabeledInput label="Account id" value={accountId} onChange={setAccountId} />
+            <LabeledInput label={CREDENTIAL_LABELS[brokerType]?.apiKey ?? "API key"} value={apiKey} onChange={setApiKey} type="password" />
+            <LabeledInput label={CREDENTIAL_LABELS[brokerType]?.apiSecret ?? "API secret"} value={apiSecret} onChange={setApiSecret} type="password" />
+            <LabeledInput label={CREDENTIAL_LABELS[brokerType]?.accountId ?? "Account id"} value={accountId} onChange={setAccountId} />
             <LabeledInput
-              label={brokerType === "MT5" ? "Passphrase (EA bridge token)" : "Passphrase"}
+              label={CREDENTIAL_LABELS[brokerType]?.passphrase ?? (brokerType === "MT5" ? "Passphrase (EA bridge token)" : "Passphrase")}
               value={passphrase}
               onChange={setPassphrase}
               type="password"
               placeholder={brokerType === "MT5" ? "Set your own EA pairing secret" : undefined}
             />
-            {brokerType === "IBKR" && (
+            {(brokerType === "IBKR" || brokerType === "LMAX") && (
               <>
-                <LabeledInput label="Host" value={host} onChange={setHost} placeholder="127.0.0.1" />
-                <LabeledInput label="Port" value={port} onChange={setPort} placeholder="7497" />
-                <LabeledInput label="Client id" value={clientId} onChange={setClientId} />
+                <LabeledInput label={brokerType === "IBKR" ? "Host" : "FIX gateway host"} value={host} onChange={setHost} placeholder={brokerType === "IBKR" ? "127.0.0.1" : undefined} />
+                <LabeledInput label="Port" value={port} onChange={setPort} placeholder={brokerType === "IBKR" ? "7497" : undefined} />
               </>
             )}
+            {(brokerType === "IBKR" || brokerType === "TRADOVATE") && (
+              <LabeledInput label={brokerType === "TRADOVATE" ? "Client id (\"cid\")" : "Client id"} value={clientId} onChange={setClientId} />
+            )}
           </div>
+          {(brokerType === "IBKR" || brokerType === "LMAX" || brokerType === "TRADOVATE") && (
+            <p className="text-[10.5px] leading-relaxed text-amber">
+              {brokerType} has a real adapter but it is scaffolded and not yet live-verified against a
+              real account/gateway in this environment — expect to debug real-world connection details
+              the first time this is actually used.
+            </p>
+          )}
 
           {error && <p className="text-xs text-red">{error}</p>}
         </div>
