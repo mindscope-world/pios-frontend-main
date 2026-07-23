@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  QUANT_ROLES,
   advanceStrategy,
   deleteStrategy,
   gateRequirement,
@@ -13,14 +14,15 @@ import {
 import { ApiError } from "../../api/client";
 import { LifecycleStepper } from "../../components/strategies/LifecycleStepper";
 import { BacktestPanel } from "../../components/strategies/BacktestPanel";
+import { BacktestStatusView } from "../../components/strategies/BacktestStatusView";
 import { KellySizingCard } from "../../components/strategies/KellySizingCard";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { useAuthStore } from "../../stores/authStore";
 
 // Create/update/advance/retire/delete are all require_quant (admin + quant)
 // server-side (app/api/v1/endpoints/strategies.py) — hide the mutating UI
-// for other roles rather than let it 403.
-const QUANT_ROLES = new Set(["admin", "quant"]);
+// for other roles rather than let it 403. QUANT_ROLES now lives in
+// api/strategies.ts, shared with BacktestPage.tsx.
 
 // DELETE /strategies/{id} 409s for these stages server-side ("retire it
 // first") — disable the button up front instead of surfacing the 409.
@@ -312,7 +314,7 @@ export default function StrategyDetailPage() {
         )}
       </div>
 
-      <BacktestPanel strategyId={strategyId} />
+      {canManage ? <BacktestPanel strategyId={strategyId} /> : <BacktestStatusView strategyId={strategyId} />}
 
       <KellySizingCard strategyId={strategyId} />
 

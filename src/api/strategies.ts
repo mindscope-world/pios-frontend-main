@@ -1,5 +1,12 @@
 import { apiFetch } from "./client";
 import type { PaginatedResponse } from "./types";
+import type { Role } from "./types";
+
+// Who can manage strategies (create/edit/delete/advance/retire) and see the
+// full backtest submission UI (form, Run button, fold table, Monte Carlo).
+// Mirrors app/api/v1/endpoints/strategies.py's require_quant gate. Shared
+// between StrategyDetailPage.tsx and BacktestPage.tsx so the two don't drift.
+export const QUANT_ROLES = new Set<Role>(["admin", "quant"]);
 
 // Mirrors app/models/all_models.py:29 StageEnum exactly.
 export type LifecycleStage = "IDEA" | "RESEARCH" | "BACKTEST" | "PAPER" | "LIVE_SMALL" | "SCALED" | "MONITOR" | "RETIRED";
@@ -51,6 +58,31 @@ export interface GateHistoryEntry {
   notes: string | null;
 }
 
+// Trader-facing PAPER-gate status (§3.1/3.2 reconciliation) — read-only,
+// computed fresh on every GET /strategies/{id} by
+// strategy_service.compute_paper_gate_status. Unlike gate_history (only
+// populated once someone actually attempts POST .../advance), this reflects
+// current status even if nobody has tried to advance yet. null on list rows
+// (GET /strategies) — only the single-item fetch computes it.
+export type PaperGateStatusLabel = "not_yet_validated" | "backtest_in_progress" | "validated" | "gate_failed";
+
+export interface GateThresholdCheck {
+  name: string;
+  label: string;
+  value: number | null;
+  threshold_label: string;
+  passed: boolean;
+}
+
+export interface PaperGateStatus {
+  status: PaperGateStatusLabel;
+  passed: boolean;
+  reason: string;
+  checks: GateThresholdCheck[];
+  based_on_job_id: string | null;
+  based_on_job_created_at: string | null;
+}
+
 export interface StrategyOut {
   id: string;
   name: string;
@@ -72,6 +104,7 @@ export interface StrategyOut {
   retirement_reason: string | null;
   created_at: string;
   alpha_clock: AlphaClock | null;
+  paper_gate: PaperGateStatus | null;
 }
 
 export interface StrategyCreatePayload {

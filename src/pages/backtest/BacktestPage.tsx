@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { gateRequirement, listStrategies } from "../../api/strategies";
+import { QUANT_ROLES, gateRequirement, listStrategies } from "../../api/strategies";
 import { BacktestPanel } from "../../components/strategies/BacktestPanel";
+import { BacktestStatusView } from "../../components/strategies/BacktestStatusView";
+import { useAuthStore } from "../../stores/authStore";
 
 // Backtests are always run against one specific strategy
 // (POST /strategies/{id}/backtest) — there's no account-wide "run a
@@ -13,6 +15,8 @@ import { BacktestPanel } from "../../components/strategies/BacktestPanel";
 export default function BacktestPage() {
   const [params, setParams] = useSearchParams();
   const selectedId = params.get("strategy") ?? "";
+  const role = useAuthStore((s) => s.user?.role);
+  const canManage = role ? QUANT_ROLES.has(role) : false;
 
   const strategies = useQuery({ queryKey: ["strategies"], queryFn: () => listStrategies({ page_size: 50 }) });
 
@@ -82,7 +86,7 @@ export default function BacktestPage() {
         ) : null}
       </div>
 
-      {selectedId && <BacktestPanel strategyId={selectedId} />}
+      {selectedId && (canManage ? <BacktestPanel strategyId={selectedId} /> : <BacktestStatusView strategyId={selectedId} />)}
     </div>
   );
 }
