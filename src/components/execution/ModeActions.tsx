@@ -6,6 +6,7 @@ import { ApiError } from "../../api/client";
 import { useExecutionModeStore } from "../../stores/executionModeStore";
 import { useAuthStore } from "../../stores/authStore";
 import { isAlgorithmicOrderType, isConditionalOrderType, type OrderSide, type OrderType } from "../../api/types";
+import { AutomaticControl } from "./AutomaticControl";
 
 // Same regime->direction proxy as the backend's prs_service.REGIME_DIRECTION
 // (and confirm_decision, which is the actual source of truth server-side —
@@ -20,11 +21,12 @@ const REGIME_DIRECTION_DISPLAY: Record<string, "LONG" | "SHORT"> = { BULL: "LONG
 const TRADE_EXEC_ROLES = new Set(["admin", "trader"]);
 
 /**
- * Manual is the only execution mode with a real backend behind it — this
- * renders an inline order ticket that calls the real POST /orders. Semi-auto
- * and Automatic have no autonomous execution engine to hook into (see
- * stores/executionModeStore.ts), so they render an explicit "not available"
- * state rather than the mockup's simulated "Pi-OSQ entered long" activity.
+ * All three modes now have a real backend: Manual renders an inline order
+ * ticket calling POST /orders, Semi-auto one-click-confirms the live
+ * decision via POST /orders/confirm-decision, and Automatic arms/disarms a
+ * background engine per symbol via POST /auto-execution/arm|disarm (paper
+ * MT5 brokers only, ~60s cadence, three circuit breakers — see
+ * AutomaticControl.tsx and app/services/auto_execution_service.py).
  */
 export function ModeActions({
   symbol,
@@ -63,12 +65,15 @@ export function ModeActions({
     }
     return <SemiAutoConfirm symbol={symbol} decision={decision} regimeLabel={regimeLabel ?? null} />;
   }
-  return (
-    <div className="rounded-lg border border-blue-border bg-blue-bg p-3 text-center">
-      <div className="mb-1 text-[11px] font-extrabold tracking-[.04em] text-blue">AUTONOMOUS EXECUTION UNAVAILABLE</div>
-      <div className="text-[10px] text-text-faint">No autonomous execution engine exists in the backend yet.</div>
-    </div>
-  );
+  if (!canTrade) {
+    return (
+      <div className="rounded-lg border border-dashed border-surface-border-strong p-3 text-[11px] text-text-faint">
+        Arming autonomous execution is restricted to trader/admin roles — this account ({role}) has view-only access
+        here.
+      </div>
+    );
+  }
+  return <AutomaticControl symbol={symbol} />;
 }
 
 // Ticket-supported order types — all eight now have real backend semantics:

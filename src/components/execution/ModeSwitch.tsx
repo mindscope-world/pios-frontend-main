@@ -44,10 +44,16 @@ export function ConfirmAutomaticModal() {
           Switch to automatic
         </h3>
         <p className="mb-4 text-[11.5px] leading-relaxed text-text-muted">
-          There is no autonomous execution engine in this build yet — switching here will not submit trades on its
-          own. This confirmation exists to preserve the intended escalation friction; the mode itself is a{" "}
-          <strong className="text-text-primary">preview state</strong> until that engine ships. You can return to
-          manual instantly at any time.
+          Automatic runs a real background engine — <strong className="text-text-primary">paper MT5 brokers
+          only</strong>, no live capital at risk. Switching this global mode doesn't arm anything by itself; you
+          still separately arm each symbol you want it to trade on the Execution screen.
+        </p>
+        <p className="mb-4 text-[11.5px] leading-relaxed text-text-muted">
+          Once a symbol is armed, it's re-evaluated against a fresh decision every{" "}
+          <strong className="text-text-primary">60 seconds</strong> and can submit one entry per symbol without
+          further confirmation. Three circuit breakers (daily loss, drawdown, max daily order count) auto-disarm
+          every armed symbol on this account the instant any of them trips — re-arming afterward is always a fresh,
+          explicit action, never automatic. You can disarm any symbol instantly at any time.
         </p>
         <div className="mt-1.5 flex gap-2">
           <button

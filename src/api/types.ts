@@ -113,6 +113,35 @@ export interface ConfirmDecisionPayload {
   client_order_id?: string | null;
 }
 
+// Autonomous execution (AUTO trading mode) — mirrors app/schemas/all_schemas.py's
+// AutoExecutionArm/DisarmRequest + AutoExecutionArmingOut. Paper MT5 brokers
+// only, per-symbol arming, three circuit breakers; see AutomaticControl.tsx.
+export interface AutoExecutionArmPayload {
+  symbol: string;
+  broker_id: string;
+}
+
+export interface AutoExecutionDisarmPayload {
+  symbol: string;
+  broker_id?: string | null;
+}
+
+export interface AutoExecutionArmingOut {
+  id: string;
+  symbol: SymbolOut | null;
+  broker_id: string;
+  is_armed: boolean;
+  armed_at: string | null;
+  disarmed_at: string | null;
+  // "user_disarm" | "circuit_breaker:daily_loss" | "circuit_breaker:drawdown"
+  // | "circuit_breaker:max_orders" | "kill_switch" | null
+  last_disarm_reason: string | null;
+  last_evaluated_at: string | null;
+  last_order_id: string | null;
+  orders_fired_today: number;
+  created_at: string;
+}
+
 export interface OrderStateEvent {
   from: string | null;
   to: string;

@@ -6,12 +6,16 @@ export type ExecutionMode = "manual" | "semi" | "automatic";
 // live decision" via POST /orders/confirm-decision (§3.1) — the backend
 // re-derives side/qty/eligibility server-side, so this is real order
 // submission, not a simulation; see order_service.confirm_decision for the
-// exact (labeled-MVP) rules it fires under. Automatic still has no
-// autonomous execution engine — nothing changed there.
+// exact (labeled-MVP) rules it fires under. Automatic: a real background
+// engine now exists (POST /auto-execution/arm) — paper MT5 brokers only,
+// per-symbol arming, three circuit breakers; see AutomaticControl.tsx.
+// This flag just means "the mode has a real backend" — per-symbol armed
+// state itself is server state (GET /auto-execution/status via react-query),
+// deliberately not duplicated into this store.
 export const MODE_HAS_BACKEND: Record<ExecutionMode, boolean> = {
   manual: true,
   semi: true,
-  automatic: false,
+  automatic: true,
 };
 
 interface ExecutionModeState {
