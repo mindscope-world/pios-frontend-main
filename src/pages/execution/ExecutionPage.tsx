@@ -66,6 +66,17 @@ interface CommandCenterPayload {
   volatility?: { vol_regime?: "HIGH" | "MEDIUM" | "LOW"; annualised_vol_pct?: number | null };
   regime?: { label?: string; confidence?: number; size_mult?: number };
   risk_state?: string;
+  // General ATR-based convention (1.5x ATR-14 stop, fixed 2:1 reward:risk
+  // target) — not a specific strategy's own configured exit rule. null
+  // when ATR/entry/direction aren't all available (see basis_note).
+  suggested_levels?: {
+    entry: number;
+    stop: number;
+    target: number;
+    direction: "LONG" | "SHORT";
+    risk_reward: number;
+    basis_note: string;
+  } | null;
 }
 
 interface OrderbookPayload {
@@ -360,10 +371,21 @@ export default function ExecutionPage() {
                   <RiskCell label="Regime" value={cc.regime?.label ?? "—"} />
                   <RiskCell label="Risk state" value={cc.risk_state ?? "—"} tone={cc.risk_state === "CRITICAL" ? "neg" : cc.risk_state === "ELEVATED" ? "hi" : "pos"} />
                 </div>
-                <p className="mb-2.5 text-[10px] leading-relaxed text-text-ghost">
-                  Concrete entry/stop/target/R:R levels aren't computed by the backend yet — this shows the real
-                  ALLOW/BLOCK gate decision and sizing instead.
-                </p>
+                {cc.suggested_levels ? (
+                  <div className="mb-2.5 grid grid-cols-2 gap-x-3.5 gap-y-1.5 rounded-md border border-dashed border-surface-border-strong p-2.5">
+                    <RiskCell label="Entry" value={cc.suggested_levels.entry.toLocaleString()} />
+                    <RiskCell label="Stop" value={cc.suggested_levels.stop.toLocaleString()} tone="neg" />
+                    <RiskCell label="Target" value={cc.suggested_levels.target.toLocaleString()} tone="pos" />
+                    <RiskCell label="R:R" value={`${cc.suggested_levels.risk_reward.toFixed(1)}:1`} />
+                    <p className="col-span-2 text-[10px] leading-relaxed text-text-ghost">{cc.suggested_levels.basis_note}</p>
+                  </div>
+                ) : (
+                  <p className="mb-2.5 text-[10px] leading-relaxed text-text-ghost">
+                    Concrete entry/stop/target levels aren't available for {symbol} right now — insufficient tick
+                    history for ATR, or the current regime ({cc.regime?.label ?? "unknown"}) gives no directional
+                    bias.
+                  </p>
+                )}
                 <ModeActions
                   symbol={symbol}
                   suggestedQty={cc.final_size_lot}
