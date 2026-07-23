@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getRiskMetrics, getKillSwitchHistory } from "../../api/risk";
+import { getRiskMetrics, getKillSwitchHistory, getCapitalPreservationStatus } from "../../api/risk";
 import { getBehaviorSession, getBehaviorOverrides, getBehaviorTrend } from "../../api/behavior";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { RiskLimitsAdmin } from "../../components/risk/RiskLimitsAdmin";
@@ -25,6 +25,7 @@ const STATUS_TONE: Record<string, string> = {
 export default function RiskPage() {
   const isAdmin = useAuthStore((s) => s.user?.role === "admin");
   const metrics = useQuery({ queryKey: ["risk-metrics"], queryFn: getRiskMetrics, staleTime: 20000 });
+  const capPreservation = useQuery({ queryKey: ["capital-preservation"], queryFn: getCapitalPreservationStatus, staleTime: 20000 });
   const behavior = useQuery({ queryKey: ["behavior-session"], queryFn: getBehaviorSession, staleTime: 20000 });
   const [behaviorHours, setBehaviorHours] = useState<(typeof HOURS_OPTIONS)[number]>(24);
   const behaviorTrend = useQuery({ queryKey: ["behavior-trend", behaviorHours], queryFn: () => getBehaviorTrend(behaviorHours), staleTime: 30000 });
@@ -40,6 +41,55 @@ export default function RiskPage() {
         <Stat label="Drawdown / Limit" value={metrics.data?.drawdown_current ?? null} suffix={metrics.data ? `% / ${metrics.data.drawdown_limit}%` : ""} />
         <Stat label="Leverage" value={metrics.data?.leverage ?? null} />
         <Stat label="Daily Loss / Limit" value={metrics.data?.daily_loss ?? null} suffix={metrics.data ? ` / ${metrics.data.daily_loss_limit}` : ""} />
+      </div>
+
+      <div className="rounded-[10px] border border-surface-border bg-surface-raised">
+        <div className="border-b border-surface-border px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
+          Capital preservation
+        </div>
+        <div className="p-4">
+          {!capPreservation.data ? (
+            <p className="text-sm text-text-muted">Loading…</p>
+          ) : !capPreservation.data.configured ? (
+            <p className="text-[11.5px] leading-relaxed text-text-faint">
+              No capital-preservation goal is configured. {isAdmin ? "Set one below (Risk limits → limit type" : "An admin can set one (Risk limits → limit type"}{" "}
+              <span className="font-mono text-text-muted">capital_preservation_goal</span>).
+            </p>
+          ) : (
+            <>
+              <Row
+                label="Goal"
+                value={`$${capPreservation.data.goal_equity!.toLocaleString()} equity`}
+              />
+              <Row
+                label="Current equity"
+                value={`$${capPreservation.data.current_equity!.toLocaleString()} (${capPreservation.data.progress_pct}%)`}
+              />
+              <div className="my-2 h-1.5 overflow-hidden rounded-full bg-surface-overlay">
+                <div
+                  className={`h-full rounded-full ${capPreservation.data.goal_met ? "bg-green" : "bg-blue"}`}
+                  style={{ width: `${Math.min(100, capPreservation.data.progress_pct ?? 0)}%` }}
+                />
+              </div>
+              <Row
+                label="Stopping zone"
+                value={capPreservation.data.goal_met ? "Active — goal met" : "Not active"}
+                tone={capPreservation.data.goal_met ? "pos" : undefined}
+              />
+              <Row
+                label="New orders"
+                value={capPreservation.data.blocks_new_orders ? "Blocked" : "Allowed"}
+                tone={capPreservation.data.blocks_new_orders ? "neg" : "pos"}
+                last
+              />
+              <p className="mt-3 text-[10.5px] leading-relaxed text-text-faint">
+                {capPreservation.data.breach_action === "ALERT"
+                  ? "Breach action is ALERT — informational only, new orders are never blocked by this goal."
+                  : "Once the goal is met, new order submission is blocked to preserve the gains that reached it. Existing open positions are never touched automatically — closing them is still a manual decision."}
+              </p>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

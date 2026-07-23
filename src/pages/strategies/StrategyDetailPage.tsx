@@ -13,6 +13,7 @@ import {
 import { ApiError } from "../../api/client";
 import { LifecycleStepper } from "../../components/strategies/LifecycleStepper";
 import { BacktestPanel } from "../../components/strategies/BacktestPanel";
+import { KellySizingCard } from "../../components/strategies/KellySizingCard";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { useAuthStore } from "../../stores/authStore";
 
@@ -312,6 +313,8 @@ export default function StrategyDetailPage() {
       </div>
 
       <BacktestPanel strategyId={strategyId} />
+
+      <KellySizingCard strategyId={strategyId} />
 
       <div className="rounded-[10px] border border-surface-border bg-surface-raised">
         <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">

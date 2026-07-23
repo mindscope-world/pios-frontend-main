@@ -220,3 +220,22 @@ export function listBacktestJobs(strategyId: string) {
 export function getBacktestJob(jobId: string) {
   return apiFetch<BacktestJobOut>(`/strategies/backtest/${jobId}`);
 }
+
+// app/services/kelly_service.py's compute_strategy_kelly_sizing — real
+// formula, real live-trade-outcome aggregator, computed and reported.
+// Below MIN_LIVE_TRADES (60) it's a backtest-derived proxy, not the guide's
+// real Kelly input — source distinguishes the two rather than blurring them.
+export interface KellySizingOut {
+  source: "live_trades" | "backtest_proxy" | "unavailable";
+  n_trades: number;
+  win_rate?: number | null;
+  win_loss_ratio?: number | null;
+  kelly_fraction: number | null;
+  fraction_cap?: number;
+  backtest_job_id?: string;
+  note: string;
+}
+
+export function getKellySizing(strategyId: string) {
+  return apiFetch<KellySizingOut>(`/strategies/${strategyId}/kelly-sizing`);
+}

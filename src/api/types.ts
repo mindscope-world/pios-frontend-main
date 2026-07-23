@@ -320,6 +320,17 @@ export interface RiskLimitOut {
   updated_at: string;
 }
 
+export interface CapitalPreservationStatusOut {
+  configured: boolean;
+  goal_equity: number | null;
+  current_equity: number | null;
+  progress_pct: number | null;
+  goal_met: boolean;
+  stopping_zone_active: boolean;
+  breach_action: string | null;
+  blocks_new_orders: boolean;
+}
+
 export interface RiskMetricsOut {
   var95: number;
   var99: number;

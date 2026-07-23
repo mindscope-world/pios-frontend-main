@@ -4,16 +4,18 @@ import { createRiskLimit, deleteRiskLimit, listRiskLimits, updateRiskLimit } fro
 import { ApiError } from "../../api/client";
 import type { RiskLimitOut } from "../../api/types";
 
-// Only these three limit_type values are actually read anywhere server-side
+// Only these limit_type values are actually read anywhere server-side
 // (app/services/order_service.py's pre-trade risk gate reads
-// "max_position_usd"; app/services/risk_service.py's metrics computation
-// reads "daily_loss_limit" and "max_drawdown_pct" for display thresholds).
+// "max_position_usd" and "capital_preservation_goal";
+// app/services/risk_service.py's metrics computation reads
+// "daily_loss_limit" and "max_drawdown_pct" for display thresholds).
 // Any other limit_type would be stored but silently never enforced or
 // shown — so the form only offers the values that actually do something.
 const LIMIT_TYPES = [
   { value: "max_position_usd", label: "Max position (USD)", note: "Blocks order submission over this notional — the only limit type the order risk gate actually enforces." },
   { value: "daily_loss_limit", label: "Daily loss limit", note: "Shown as a threshold on the Risk metrics tile — not currently enforced as a trading block." },
   { value: "max_drawdown_pct", label: "Max drawdown (%)", note: "Shown as the drawdown_limit on the Risk metrics tile — not currently enforced as a trading block." },
+  { value: "capital_preservation_goal", label: "Capital preservation goal (equity $)", note: "Once account equity reaches this target, breach_action decides what happens — see below. Surfaced on the Risk page's Capital preservation card." },
 ];
 
 const BREACH_ACTIONS = ["ALERT", "BLOCK", "KILL_SWITCH"];
@@ -61,15 +63,18 @@ export function RiskLimitsAdmin() {
       )}
 
       <p className="border-t border-surface-border px-4 py-2.5 text-[10px] leading-relaxed text-text-faint">
-        breach_action is stored but not yet branched on anywhere server-side — every limit type behaves the same
-        (ALERT/BLOCK/KILL_SWITCH make no behavioral difference today). Shown for completeness, not because it changes
-        enforcement.
+        breach_action only actually changes behavior for <span className="font-mono">capital_preservation_goal</span>:
+        ALERT is informational only, BLOCK/KILL_SWITCH block new order submission once the goal is met (existing
+        positions are never auto-closed). For the other three limit types it's still stored but not yet branched on.
       </p>
 
       {showCreate && (
         <CreateLimitModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => queryClient.invalidateQueries({ queryKey: ["risk-limits"] })}
+          onCreated={() => {
+            queryClient.invalidateQueries({ queryKey: ["risk-limits"] });
+            queryClient.invalidateQueries({ queryKey: ["capital-preservation"] });
+          }}
         />
       )}
     </div>
@@ -87,6 +92,7 @@ function LimitRow({ limit }: { limit: RiskLimitOut }) {
     mutationFn: () => updateRiskLimit(limit.id, { limit_value: Number(limitValue), breach_action: breachAction }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["risk-limits"] });
+      queryClient.invalidateQueries({ queryKey: ["capital-preservation"] });
       setEditing(false);
       setError(null);
     },
@@ -95,7 +101,10 @@ function LimitRow({ limit }: { limit: RiskLimitOut }) {
 
   const deactivate = useMutation({
     mutationFn: () => deleteRiskLimit(limit.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["risk-limits"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["risk-limits"] });
+      queryClient.invalidateQueries({ queryKey: ["capital-preservation"] });
+    },
     onError: (err) => setError(err instanceof ApiError ? (err.body as { detail?: string } | null)?.detail ?? err.message : "Deactivate failed."),
   });
 
@@ -230,7 +239,12 @@ function CreateLimitModal({ onClose, onCreated }: { onClose: () => void; onCreat
             <input
               value={limitValue}
               onChange={(e) => setLimitValue(e.target.value)}
-              placeholder={limitType === "max_position_usd" ? "e.g. 20000" : limitType === "max_drawdown_pct" ? "e.g. 15" : "e.g. 5000"}
+              placeholder={
+                limitType === "max_position_usd" ? "e.g. 20000" :
+                limitType === "max_drawdown_pct" ? "e.g. 15" :
+                limitType === "capital_preservation_goal" ? "e.g. 150000" :
+                "e.g. 5000"
+              }
               className="w-full rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
             />
           </div>

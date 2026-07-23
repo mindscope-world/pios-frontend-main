@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type {
+  CapitalPreservationStatusOut,
   KillSwitchEventOut,
   KillSwitchPayload,
   MessageResponse,
@@ -10,6 +11,10 @@ import type {
 
 export function getRiskMetrics() {
   return apiFetch<RiskMetricsOut>("/risk/metrics");
+}
+
+export function getCapitalPreservationStatus() {
+  return apiFetch<CapitalPreservationStatusOut>("/risk/capital-preservation");
 }
 
 export function listRiskLimits() {
