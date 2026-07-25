@@ -5,6 +5,7 @@ import { getRiskMetrics, getKillSwitchHistory, getCapitalPreservationStatus } fr
 import { getBehaviorSession, getBehaviorOverrides, getBehaviorTrend } from "../../api/behavior";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { RiskLimitsAdmin } from "../../components/risk/RiskLimitsAdmin";
+import { PendingSignoffQueue } from "../../components/risk/PendingSignoffQueue";
 import { useAuthStore } from "../../stores/authStore";
 
 const HOURS_OPTIONS = [24, 72, 168] as const;
@@ -278,6 +279,8 @@ export default function RiskPage() {
           </table>
         )}
       </div>
+
+      <PendingSignoffQueue />
 
       {isAdmin && <RiskLimitsAdmin />}
 

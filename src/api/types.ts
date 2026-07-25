@@ -173,6 +173,14 @@ export interface OrderOut {
   // "CONDITIONAL" for STOP_LIMIT/OCO (armed, fires on trigger), "INSTANT"
   // otherwise. Show this on every order row.
   execution_style: ExecutionStyle;
+  // Model governance (Guide Part IX) — set when this order's notional
+  // impact crossed the human-signoff threshold. status stays NEW until a
+  // second human (never the submitter) approves/rejects via
+  // POST /orders/{id}/signoff — see api/orders.ts.
+  signoff_required: boolean;
+  signoff_by: string | null;
+  signoff_at: string | null;
+  signoff_reason: string | null;
 }
 
 export interface FillOut {

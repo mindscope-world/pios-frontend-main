@@ -9,6 +9,7 @@ import {
   getStrategy,
   nextStage,
   retireStrategy,
+  shadowTradingDaysRemaining,
   updateStrategy,
 } from "../../api/strategies";
 import { ApiError } from "../../api/client";
@@ -148,6 +149,7 @@ export default function StrategyDetailPage() {
   const s = strategy.data;
   const next = nextStage(s.lifecycle_stage);
   const gateReq = gateRequirement(s.lifecycle_stage);
+  const shadowDaysRemaining = shadowTradingDaysRemaining(s);
 
   return (
     <div className="space-y-4">
@@ -183,6 +185,11 @@ export default function StrategyDetailPage() {
 
         {canManage && s.lifecycle_stage !== "RETIRED" && (
           <div className="border-t border-surface-border p-4">
+            {shadowDaysRemaining !== null && shadowDaysRemaining > 0 && (
+              <div className="mb-2 rounded-md border border-amber-border bg-amber-bg px-3 py-1.5 text-[10.5px] text-amber">
+                Shadow trading in progress — {shadowDaysRemaining} day{shadowDaysRemaining === 1 ? "" : "s"} remaining before LIVE_SMALL is eligible (entered PAPER {s.entered_paper_at ? new Date(s.entered_paper_at).toLocaleDateString() : "?"})
+              </div>
+            )}
             {next && (
               <div className="mb-3">
                 {!advancing ? (

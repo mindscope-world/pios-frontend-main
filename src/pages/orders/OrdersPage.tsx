@@ -222,7 +222,7 @@ export default function OrdersPage() {
                   </td>
                   <td className="px-2.5 py-2.5 font-mono">{o.avg_fill_price ?? "—"}</td>
                   <td className="px-2.5 py-2.5">
-                    <OrderStatusBadge status={o.status} />
+                    <OrderStatusBadge status={o.status} signoffRequired={o.signoff_required} />
                   </td>
                   <td className="px-2.5 py-2.5">
                     <ExecutionStyleBadge executionStyle={o.execution_style} />

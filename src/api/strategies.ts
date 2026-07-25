@@ -33,14 +33,35 @@ export function nextStage(stage: LifecycleStage): LifecycleStage | null {
 // Human-readable gate requirement for the NEXT stage, mirroring
 // strategy_service.py's _check_gate exactly — shown before the user clicks
 // Advance, not just discovered from a failure after the fact.
+// Model governance (Guide Part IX) — mirrors app/core/config.py's
+// SHADOW_TRADING_MIN_DAYS. An explicitly-labeled MVP invented threshold (no
+// real shadow-trading-duration figure was ever found in this repo or
+// filesystem, same situation as the V10.1/V10.3 addenda) — update both
+// sides together if the real guide number ever surfaces.
+export const SHADOW_TRADING_MIN_DAYS = 14;
+
 export function gateRequirement(stage: LifecycleStage): string | null {
   const next = nextStage(stage);
   if (next === "BACKTEST") return "Requires a non-empty hypothesis.";
   if (next === "PAPER") return "Requires a COMPLETE backtest with Sharpe ≥ 0.8, max drawdown ≤ 15%, and ≥ 200 trades.";
-  if (next === "LIVE_SMALL" || next === "SCALED") {
+  if (next === "LIVE_SMALL") {
+    return `Requires a COMPLETE backtest meeting the PAPER gate, is_paper_only cleared by an admin, and at least ${SHADOW_TRADING_MIN_DAYS} days of shadow trading in PAPER.`;
+  }
+  if (next === "SCALED") {
     return "Requires a COMPLETE backtest meeting the PAPER gate, and is_paper_only must be cleared by an admin.";
   }
   return null;
+}
+
+// Days remaining in the shadow-trading period before PAPER→LIVE_SMALL is
+// allowed. null when not applicable (strategy not in PAPER) or when
+// entered_paper_at is unset (the gate then fails closed server-side —
+// see strategy_service._check_gate — regardless of what's shown here).
+export function shadowTradingDaysRemaining(strategy: StrategyOut): number | null {
+  if (strategy.lifecycle_stage !== "PAPER" || !strategy.entered_paper_at) return null;
+  const elapsedMs = Date.now() - new Date(strategy.entered_paper_at).getTime();
+  const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
+  return Math.max(0, Math.ceil(SHADOW_TRADING_MIN_DAYS - elapsedDays));
 }
 
 // V10.4 D.2 — mirrors app/schemas/all_schemas.py AlphaClock. Stored in
@@ -99,6 +120,7 @@ export interface StrategyOut {
   is_paper_only: boolean;
   tags: string[] | null;
   gate_history: GateHistoryEntry[];
+  entered_paper_at: string | null;
   deployed_at: string | null;
   retired_at: string | null;
   retirement_reason: string | null;

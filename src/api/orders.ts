@@ -57,3 +57,17 @@ export function listAllFills(params: { page?: number; page_size?: number } = {})
 export function getOrderTca(orderId: string) {
   return apiFetch<TCAReport>(`/orders/${orderId}/tca`);
 }
+
+// Model governance (Guide Part IX) — the human-signoff approval queue.
+// require_signoff-gated server-side (admin/compliance only — deliberately
+// excludes trader/quant, the roles that submit orders).
+export function listPendingSignoff() {
+  return apiFetch<OrderOut[]>("/orders/pending-signoff");
+}
+
+export function submitOrderSignoff(orderId: string, payload: { approved: boolean; reason: string; mfa_code?: string }) {
+  return apiFetch<OrderOut>(`/orders/${orderId}/signoff`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}

@@ -56,7 +56,7 @@ export default function OrderDetailPage() {
               {o.symbol?.symbol ?? "—"}
             </span>
             <span className={`text-sm font-semibold ${o.side === "BUY" ? "text-green" : "text-red"}`}>{o.side}</span>
-            <OrderStatusBadge status={o.status} />
+            <OrderStatusBadge status={o.status} signoffRequired={o.signoff_required} />
             <ExecutionStyleBadge executionStyle={o.execution_style} />
           </div>
           {canCancel && !isTerminalOrderStatus(o.status) && (
@@ -81,6 +81,12 @@ export default function OrderDetailPage() {
           <Field label="Created" value={new Date(o.created_at).toLocaleString()} />
           <Field label="Submitted" value={o.submitted_at ? new Date(o.submitted_at).toLocaleString() : "—"} />
           <Field label="Filled" value={o.filled_at ? new Date(o.filled_at).toLocaleString() : "—"} />
+          {o.signoff_required && (
+            <>
+              <Field label="Sign-off" value={o.signoff_at ? new Date(o.signoff_at).toLocaleString() : "Pending"} />
+              <Field label="Sign-off reason" value={o.signoff_reason ?? "—"} />
+            </>
+          )}
         </div>
       </div>
 

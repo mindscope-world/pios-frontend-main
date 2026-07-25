@@ -6,16 +6,18 @@ import type { RiskLimitOut } from "../../api/types";
 
 // Only these limit_type values are actually read anywhere server-side
 // (app/services/order_service.py's pre-trade risk gate reads
-// "max_position_usd" and "capital_preservation_goal";
-// app/services/risk_service.py's metrics computation reads
-// "daily_loss_limit" and "max_drawdown_pct" for display thresholds).
-// Any other limit_type would be stored but silently never enforced or
-// shown — so the form only offers the values that actually do something.
+// "max_position_usd", "capital_preservation_goal", and
+// "human_signoff_threshold_usd"; app/services/risk_service.py's metrics
+// computation reads "daily_loss_limit" and "max_drawdown_pct" for display
+// thresholds). Any other limit_type would be stored but silently never
+// enforced or shown — so the form only offers the values that actually do
+// something.
 const LIMIT_TYPES = [
   { value: "max_position_usd", label: "Max position (USD)", note: "Blocks order submission over this notional — the only limit type the order risk gate actually enforces." },
   { value: "daily_loss_limit", label: "Daily loss limit", note: "Shown as a threshold on the Risk metrics tile — not currently enforced as a trading block." },
   { value: "max_drawdown_pct", label: "Max drawdown (%)", note: "Shown as the drawdown_limit on the Risk metrics tile — not currently enforced as a trading block." },
   { value: "capital_preservation_goal", label: "Capital preservation goal (equity $)", note: "Once account equity reaches this target, breach_action decides what happens — see below. Surfaced on the Risk page's Capital preservation card." },
+  { value: "human_signoff_threshold_usd", label: "Human sign-off threshold (USD)", note: "Guide Part IX model governance — an order whose notional impact exceeds this is held at NEW pending a second human's approval (POST /orders/{id}/signoff) instead of dispatching. breach_action is not used for this type — it always requires sign-off, never auto-blocks." },
 ];
 
 const BREACH_ACTIONS = ["ALERT", "BLOCK", "KILL_SWITCH"];
@@ -65,7 +67,9 @@ export function RiskLimitsAdmin() {
       <p className="border-t border-surface-border px-4 py-2.5 text-[10px] leading-relaxed text-text-faint">
         breach_action only actually changes behavior for <span className="font-mono">capital_preservation_goal</span>:
         ALERT is informational only, BLOCK/KILL_SWITCH block new order submission once the goal is met (existing
-        positions are never auto-closed). For the other three limit types it's still stored but not yet branched on.
+        positions are never auto-closed). <span className="font-mono">human_signoff_threshold_usd</span> ignores
+        breach_action entirely — crossing it always routes the order to the pending-signoff queue rather than
+        blocking or alerting. For the other two limit types breach_action is still stored but not yet branched on.
       </p>
 
       {showCreate && (
@@ -243,6 +247,7 @@ function CreateLimitModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 limitType === "max_position_usd" ? "e.g. 20000" :
                 limitType === "max_drawdown_pct" ? "e.g. 15" :
                 limitType === "capital_preservation_goal" ? "e.g. 150000" :
+                limitType === "human_signoff_threshold_usd" ? "e.g. 50000" :
                 "e.g. 5000"
               }
               className="w-full rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-text-primary outline-none focus:border-accent"
