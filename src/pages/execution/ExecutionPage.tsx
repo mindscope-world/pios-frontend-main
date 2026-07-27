@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   getAlpacaCryptoSymbols,
+  getOandaForexSymbols,
   getCommandCenter,
   getMarketOrderbook,
   getWhyNotTrade,
@@ -31,12 +32,14 @@ import {
 // rather than a hardcoded subset; this fallback covers the brief window
 // before that loads (or the rare case Alpaca credentials aren't configured).
 const DEFAULT_CRYPTO_SYMBOLS = ["BTC/USDT"];
-// Fiat/metal pairs route to OANDA for live data (any fiat/metal pair works —
-// see _is_forex_symbol in market_data_service.py), so the picker offers the
-// majors + metals. Pairs without a `symbols` DB row get live price/chart/
+// Forex/metals pairs are the full OANDA-tradable instrument list, fetched
+// live (see getOandaForexSymbols) so this always matches the account's real
+// listing rather than a hardcoded subset; this fallback covers the brief
+// window before that loads (or the rare case OANDA credentials aren't
+// configured). Pairs without a `symbols` DB row get live price/chart/
 // orderbook but show the honest "waiting for the intelligence worker" state
 // on the decision panel — same boundary behavior as unlisted crypto pairs.
-const FOREX_METAL_SYMBOLS = [
+const DEFAULT_FOREX_METAL_SYMBOLS = [
   "EUR/USD",
   "GBP/USD",
   "USD/JPY",
@@ -113,6 +116,19 @@ export default function ExecutionPage() {
   const CRYPTO_SYMBOLS = cryptoSymbols.data?.symbols.length
     ? cryptoSymbols.data.symbols.map((s) => s.symbol)
     : DEFAULT_CRYPTO_SYMBOLS;
+
+  // Full OANDA-tradable currency-pair + metal list — cached an hour both
+  // client- and server-side (see the backend's list_oanda_instruments
+  // docstring for the type-filter rationale).
+  const forexSymbols = useQuery({
+    queryKey: ["oanda-forex-symbols"],
+    queryFn: getOandaForexSymbols,
+    staleTime: 60 * 60 * 1000,
+  });
+  const FOREX_METAL_SYMBOLS = forexSymbols.data?.symbols.length
+    ? forexSymbols.data.symbols.map((s) => s.symbol)
+    : DEFAULT_FOREX_METAL_SYMBOLS;
+
   const SYMBOLS = [...CRYPTO_SYMBOLS, ...FOREX_METAL_SYMBOLS];
 
   const commandCenter = useCachedIntelligence(["command-center", symbol], () => getCommandCenter(symbol));

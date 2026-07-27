@@ -147,6 +147,31 @@ export interface CryptoSymbolsPayload {
 export const getAlpacaCryptoSymbols = () =>
   apiFetch<CryptoSymbolsPayload>("/intelligence/market/crypto-symbols");
 
+export interface OandaInstrument {
+  symbol: string;
+  type: "CURRENCY" | "METAL";
+  // True for XAU/USD + XAG/USD when this account's real OANDA listing has
+  // no metals of its own (confirmed live 2026-07-27, not a filtering bug —
+  // see list_oanda_instruments' docstring). Lets the UI label these as a
+  // fallback rather than presenting them as real OANDA data.
+  supplemental: boolean;
+}
+
+export interface ForexSymbolsPayload {
+  symbols: OandaInstrument[];
+  count: number;
+  fetched_at: string;
+}
+
+// GET /intelligence/market/forex-symbols — every currency pair and metal
+// instrument this OANDA account currently lists as tradable, plus a labeled
+// XAU/USD + XAG/USD supplement when the account itself has no metals (see
+// OandaInstrument.supplemental). Same rationale as getAlpacaCryptoSymbols:
+// reflects OANDA's real listing instead of a hardcoded subset (was 12
+// pairs); empty (not an error) without credentials.
+export const getOandaForexSymbols = () =>
+  apiFetch<ForexSymbolsPayload>("/intelligence/market/forex-symbols");
+
 // crypto/forex/stocks are comma-separated symbol lists, NOT a single `symbol`.
 export const getMarketSnapshot = (params: { crypto?: string; forex?: string; stocks?: string } = {}) =>
   apiFetch<Payload>(`/intelligence/market/snapshot${buildQuery(params)}`);
