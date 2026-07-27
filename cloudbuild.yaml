@@ -1,0 +1,13 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - VITE_API_BASE_URL=https://pios-api-156690333762.us-central1.run.app
+      - --build-arg
+      - VITE_WS_BASE_URL=wss://pios-api-156690333762.us-central1.run.app
+      - -t
+      - us-central1-docker.pkg.dev/project-838c5c4f-baf1-4e7f-93d/pios-images/pios-frontend:latest
+      - .
+images:
+  - us-central1-docker.pkg.dev/project-838c5c4f-baf1-4e7f-93d/pios-images/pios-frontend:latest
