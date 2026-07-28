@@ -17,6 +17,7 @@ import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptySta
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { formatMoney } from "../../utils/currency";
 import { ModeActions } from "../../components/execution/ModeActions";
+import { TradingModeSelector } from "../../components/execution/TradingModeSelector";
 import { PriceChart } from "../../components/execution/PriceChart";
 import { SymbolPickerModal } from "../../components/execution/SymbolPickerModal";
 import { useChannelSocket } from "../../realtime/useChannelSocket";
@@ -69,14 +70,15 @@ interface CommandCenterPayload {
   volatility?: { vol_regime?: "HIGH" | "MEDIUM" | "LOW"; annualised_vol_pct?: number | null };
   regime?: { label?: string; confidence?: number; size_mult?: number };
   risk_state?: string;
-  // Entry/stop from the real proprietary strategy that owns the current
-  // regime (OFI Momentum for BULL/BEAR/RECOVERY, OU Mean Reversion for
-  // RANGE, GARCH Breakout for CRISIS), or from Hurst Adaptive Meta's
-  // fallback (strategy_key: "HURST_ADAPTIVE_META", via_hurst_fallback on
-  // live_strategy_signal below) when the owner has no live signal right
-  // now — null when neither has one. No `target`/`risk_reward` — none of
-  // the 5 strategies define a fixed take-profit; basis_note describes the
-  // real exit condition instead.
+  // Entry/stop from the real proprietary strategy or strategies eligible
+  // for the current regime (OFI Momentum for LOW_VOL_TREND/HIGH_VOL_TREND,
+  // GARCH Breakout also eligible in HIGH_VOL_TREND, OU Mean Reversion for
+  // RANGE_BOUND; none for CRISIS_LIQUIDITY/MACRO_EVENT), or from Hurst
+  // Adaptive Meta's fallback (strategy_key: "HURST_ADAPTIVE_META",
+  // via_hurst_fallback on live_strategy_signal below) when none of them has
+  // a live signal right now — null when nothing fires. No `target`/
+  // `risk_reward` — none of the 5 strategies define a fixed take-profit;
+  // basis_note describes the real exit condition instead.
   suggested_levels?: {
     entry: number;
     stop: number;
@@ -84,10 +86,10 @@ interface CommandCenterPayload {
     strategy_key: string;
     basis_note: string;
   } | null;
-  // Always present (every regime label this codebase can produce now has
-  // an owning strategy) even with no suggested_levels, so the UI can say
-  // *why* nothing is suggested right now instead of a single unexplained
-  // blank state.
+  // Always present -- null strategy_key only for CRISIS_LIQUIDITY/
+  // MACRO_EVENT (no strategy eligible by design), so the UI can say *why*
+  // nothing is suggested right now instead of a single unexplained blank
+  // state.
   live_strategy_signal?: {
     strategy_key: string | null;
     direction: "LONG" | "SHORT" | null;
@@ -439,12 +441,14 @@ export default function ExecutionPage() {
                     or the current regime ({cc.regime?.label ?? "unknown"}) has no strategy wired in for direction.
                   </p>
                 )}
+                <TradingModeSelector />
                 <ModeActions
                   symbol={symbol}
                   suggestedQty={cc.final_size_lot}
                   referencePrice={livePrice?.price ?? cc.live_market?.price ?? null}
                   decision={cc.decision}
                   regimeLabel={cc.regime?.label ?? null}
+                  liveDirection={cc.live_strategy_signal?.direction ?? null}
                 />
               </>
             ) : commandCenter.isPending ? (

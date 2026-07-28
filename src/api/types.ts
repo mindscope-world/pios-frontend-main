@@ -12,6 +12,10 @@ export interface UserOut {
   mfa_enabled: boolean;
   last_login_at: string | null;
   created_at: string;
+  // trading_mode (MANUAL/SEMI_AUTOMATIC/AUTOMATIC -- see
+  // app/services/trading_mode_service.py) lives here as
+  // preferences.trading_mode; any other per-account preference too.
+  preferences: Record<string, unknown>;
 }
 
 export interface TokenPair {

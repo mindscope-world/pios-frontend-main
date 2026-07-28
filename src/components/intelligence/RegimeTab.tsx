@@ -43,12 +43,16 @@ interface RegimeTrendPoint {
   conflict_level: number;
 }
 
+// Five real regime states (owner feedback, 2026-07-28) -- RECOVERY removed
+// entirely (owner ruling 2026-07-28: not one of the five real regimes under
+// any name; see workplan.md SS A/E.1). Matches regime_taxonomy.py's
+// REGIME_STATES on the backend.
 const REGIME_TONE: Record<string, "green" | "red" | "amber" | "blue" | "neutral"> = {
-  BULL: "green",
-  BEAR: "red",
-  RANGE: "amber",
-  CRISIS: "red",
-  RECOVERY: "blue",
+  LOW_VOL_TREND: "green",
+  HIGH_VOL_TREND: "amber",
+  RANGE_BOUND: "blue",
+  CRISIS_LIQUIDITY: "red",
+  MACRO_EVENT: "red",
 };
 
 export function RegimeTab({ symbol }: { symbol?: string }) {

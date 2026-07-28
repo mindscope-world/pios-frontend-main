@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getCapitalAllocation, triggerRebalance, type ClockBandsOut } from "../../api/capital";
+import { getCapitalAllocation, getRebalanceJob, triggerRebalance, type ClockBandsOut } from "../../api/capital";
 import { useAuthStore } from "../../stores/authStore";
 
 export default function CapitalPage() {
@@ -22,6 +22,19 @@ export default function CapitalPage() {
     onSuccess: (res) => {
       setRebalanceResult(res.job_id);
       queryClient.invalidateQueries({ queryKey: ["capital-allocation"] });
+    },
+  });
+
+  // Polls the real job status now that GET /capital/rebalance/{job_id}
+  // exists — refetches every 1.5s while QUEUED/RUNNING, stops once the job
+  // reaches a terminal state (COMPLETE/FAILED) so it doesn't poll forever.
+  const rebalanceJob = useQuery({
+    queryKey: ["rebalance-job", rebalanceResult],
+    queryFn: () => getRebalanceJob(rebalanceResult as string),
+    enabled: rebalanceResult !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "COMPLETE" || status === "FAILED" ? false : 1500;
     },
   });
 
@@ -64,10 +77,41 @@ export default function CapitalPage() {
             </p>
 
             {rebalanceResult && (
-              <p className="mx-4 mb-3 rounded-md border border-blue-border bg-blue-bg p-2.5 text-[10.5px] text-blue">
-                Rebalance queued — job {rebalanceResult}. This creates a placeholder record server-side; there's no
-                status endpoint to poll it (see api/capital.ts).
-              </p>
+              <div className="mx-4 mb-3 rounded-md border border-blue-border bg-blue-bg p-2.5 text-[10.5px] text-blue">
+                {(() => {
+                  const job = rebalanceJob.data;
+                  if (!job) {
+                    return <p>Rebalance queued — job {rebalanceResult}. Fetching status…</p>;
+                  }
+                  if (job.status === "FAILED") {
+                    return (
+                      <p className="text-red">
+                        Rebalance job {rebalanceResult} FAILED — {job.error_message ?? "no reason reported."}
+                      </p>
+                    );
+                  }
+                  if (job.status === "COMPLETE") {
+                    const weights = job.full_report?.target_weights ?? {};
+                    return (
+                      <div>
+                        <p className="text-green">Rebalance job {rebalanceResult} COMPLETE — new HRP target weights:</p>
+                        <ul className="mt-1 list-disc pl-4">
+                          {Object.entries(weights).map(([asset, w]) => (
+                            <li key={asset}>
+                              {asset}: {(w * 100).toFixed(2)}%
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  }
+                  return (
+                    <p>
+                      Rebalance job {rebalanceResult} — {job.status} ({job.progress_pct}%)
+                    </p>
+                  );
+                })()}
+              </div>
             )}
 
             <table className="w-full text-[11.5px]">

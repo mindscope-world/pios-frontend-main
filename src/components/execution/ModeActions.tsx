@@ -8,13 +8,6 @@ import { useAuthStore } from "../../stores/authStore";
 import { isAlgorithmicOrderType, isConditionalOrderType, type OrderSide, type OrderType } from "../../api/types";
 import { AutomaticControl } from "./AutomaticControl";
 
-// Same regime->direction proxy as the backend's prs_service.REGIME_DIRECTION
-// (and confirm_decision, which is the actual source of truth server-side —
-// this copy is display-only, so the button's enabled state matches what the
-// backend will decide, but the backend re-derives it independently rather
-// than trusting this).
-const REGIME_DIRECTION_DISPLAY: Record<string, "LONG" | "SHORT"> = { BULL: "LONG", BEAR: "SHORT" };
-
 // POST /orders is require_trade_exec (admin + trader only) server-side —
 // don't show a live-looking BUY/SELL ticket to viewer/compliance/quant that
 // would just 403.
@@ -34,12 +27,20 @@ export function ModeActions({
   referencePrice,
   decision,
   regimeLabel,
+  liveDirection,
 }: {
   symbol: string;
   suggestedQty: number | null;
   referencePrice?: number | null;
   decision?: "ALLOW" | "BLOCK" | "WAIT" | "REDUCE";
   regimeLabel?: string | null;
+  // The real per-strategy live signal's direction (command_center's
+  // live_strategy_signal.direction) -- NOT derived from the regime label.
+  // None of the five real regime states (LOW_VOL_TREND/HIGH_VOL_TREND/
+  // RANGE_BOUND/CRISIS_LIQUIDITY/MACRO_EVENT) encode a direction the way
+  // the old BULL/BEAR labels did; direction now comes from whichever
+  // strategy is actually firing (OFI z-score sign, OU z-score sign, etc.).
+  liveDirection?: "LONG" | "SHORT" | null;
 }) {
   const mode = useExecutionModeStore((s) => s.mode);
   const role = useAuthStore((s) => s.user?.role);
@@ -63,7 +64,14 @@ export function ModeActions({
         </div>
       );
     }
-    return <SemiAutoConfirm symbol={symbol} decision={decision} regimeLabel={regimeLabel ?? null} />;
+    return (
+      <SemiAutoConfirm
+        symbol={symbol}
+        decision={decision}
+        regimeLabel={regimeLabel ?? null}
+        liveDirection={liveDirection ?? null}
+      />
+    );
   }
   if (!canTrade) {
     return (
@@ -90,17 +98,19 @@ const inputCls =
 // lot-denominated — see order_service.confirm_decision for why that
 // can't be generalized to other brokers' unit conventions without
 // inventing a conversion). The button is inert unless decision === ALLOW
-// and the regime gives a directional bias — this mirrors, but does not
-// replace, the backend's own re-derivation: what's shown here is a
-// preview of what confirm-decision will do, not the source of truth.
+// and the real per-strategy live signal has a direction — this mirrors,
+// but does not replace, the backend's own re-derivation: what's shown here
+// is a preview of what confirm-decision will do, not the source of truth.
 function SemiAutoConfirm({
   symbol,
   decision,
   regimeLabel,
+  liveDirection,
 }: {
   symbol: string;
   decision?: "ALLOW" | "BLOCK" | "WAIT" | "REDUCE";
   regimeLabel: string | null;
+  liveDirection: "LONG" | "SHORT" | null;
 }) {
   const queryClient = useQueryClient();
   const brokers = useQuery({ queryKey: ["brokers", "picker"], queryFn: () => listBrokers({ page_size: 50 }) });
@@ -115,8 +125,7 @@ function SemiAutoConfirm({
     // requires the trader to explicitly pick which broker gets the order.
   }, [symbol]);
 
-  const direction = regimeLabel ? REGIME_DIRECTION_DISPLAY[regimeLabel] : undefined;
-  const impliedSide: OrderSide | null = direction === "LONG" ? "BUY" : direction === "SHORT" ? "SELL" : null;
+  const impliedSide: OrderSide | null = liveDirection === "LONG" ? "BUY" : liveDirection === "SHORT" ? "SELL" : null;
 
   const confirm = useMutation({
     mutationFn: () => confirmDecision({ symbol, broker_id: brokerId }),
@@ -148,7 +157,7 @@ function SemiAutoConfirm({
     decision !== "ALLOW"
       ? `Decision is ${decision ?? "unknown"}, not ALLOW — nothing to confirm.`
       : !impliedSide
-        ? `Regime ${regimeLabel ?? "unknown"} gives no directional bias — nothing to confirm.`
+        ? `No live entry signal right now for regime ${regimeLabel ?? "unknown"} — nothing to confirm.`
         : !brokerId
           ? "Pick a broker to confirm against."
           : null;
@@ -158,9 +167,9 @@ function SemiAutoConfirm({
       <div className="mb-2 text-[10px] leading-relaxed text-text-faint">
         Confirms the <em>current live</em> decision, re-derived server-side at the moment you click — not whatever
         was last rendered here. {impliedSide ? (
-          <>Implied side: <span className="font-bold text-text-primary">{impliedSide}</span> (regime {regimeLabel} → {direction}-biased).</>
+          <>Implied side: <span className="font-bold text-text-primary">{impliedSide}</span> (live {liveDirection}-direction signal, regime {regimeLabel}).</>
         ) : (
-          <>No directional bias from the current regime ({regimeLabel ?? "unknown"}).</>
+          <>No live entry signal right now (regime {regimeLabel ?? "unknown"}).</>
         )}
       </div>
 

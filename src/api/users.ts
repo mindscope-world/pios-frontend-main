@@ -31,6 +31,7 @@ export interface UserUpdatePayload {
   full_name?: string;
   role?: string;
   is_active?: boolean;
+  preferences?: Record<string, unknown>;
 }
 
 export function updateUser(userId: string, payload: UserUpdatePayload) {

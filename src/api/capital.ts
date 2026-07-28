@@ -67,6 +67,30 @@ export interface RebalanceJobOut {
   job_id: string;
 }
 
+// GET /capital/rebalance/{job_id} response — the job IS a real BacktestJob
+// row (rebalance_portfolio_task, backtest_worker.py, recomputes real HRP
+// target weights), so this mirrors app/schemas/all_schemas.py's
+// BacktestJobOut, but with full_report typed to what a REBALANCE-type job
+// actually writes (target_weights/asset_exposure_usd) rather than reusing
+// strategies.ts's backtest-specific BacktestFullReport shape, which doesn't
+// apply here.
+export type RebalanceJobStatus = "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED";
+
+export interface RebalanceJobStatusOut {
+  id: string;
+  status: RebalanceJobStatus;
+  progress_pct: number;
+  full_report: {
+    type: "REBALANCE";
+    target_weights: Record<string, number>;
+    asset_exposure_usd: Record<string, number>;
+  } | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 // Computed from the CALLING USER's own positions/PnL snapshots
 // (Position.user_id == current_user.id) — unlike positions/equity_curve
 // elsewhere in the app, this one IS correctly scoped per-trader.
@@ -74,10 +98,16 @@ export function getCapitalAllocation() {
   return apiFetch<CapitalAllocationOut>("/capital/allocation");
 }
 
-// require_admin server-side. Synthetic: queues a BacktestJob-shaped
-// placeholder row (config.type = "REBALANCE") rather than a real
-// portfolio rebalance — see RebalanceJobOut's job_id is not pollable
-// anywhere; there's no GET /capital/rebalance/{job_id}.
+// require_admin server-side. Queues a real HRP-recomputation job
+// (rebalance_portfolio_task) tracked as a BacktestJob row (config.type ==
+// "REBALANCE") — poll it via getRebalanceJob(job_id).
 export function triggerRebalance() {
   return apiFetch<RebalanceJobOut>("/capital/rebalance", { method: "POST" });
+}
+
+// Scoped server-side to the job's own submitter or an admin (matching
+// triggerRebalance's require_admin trigger permission) — 404s otherwise,
+// same as a job that doesn't exist.
+export function getRebalanceJob(jobId: string) {
+  return apiFetch<RebalanceJobStatusOut>(`/capital/rebalance/${jobId}`);
 }
