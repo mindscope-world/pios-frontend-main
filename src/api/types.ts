@@ -372,6 +372,15 @@ export interface RiskMetricsOut {
   var95: number;
   var99: number;
   cvar: number;
+  // "historical" = real 30d PnLSnapshot return distribution; "garch_parametric"
+  // = real GJR-GARCH vol forecast (insufficient snapshot history);
+  // "fallback_estimate" = fixed % of total_equity, no real computation behind
+  // it — label the VaR figures accordingly rather than presenting all three
+  // as equally live-computed.
+  var_source: "historical" | "garch_parametric" | "fallback_estimate";
+  // True when total_equity itself has no real PnLSnapshot to read from
+  // (defaults to a fabricated $100,000).
+  equity_is_estimated: boolean;
   drawdown_current: number;
   // Real RiskLimit-backed value now — same caveat as PortfolioMetricsOut above.
   drawdown_limit: number;

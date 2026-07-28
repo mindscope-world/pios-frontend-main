@@ -143,8 +143,10 @@ export function AutomaticControl({ symbol }: { symbol: string }) {
         </div>
       )}
       <div className="mb-2 text-[10px] leading-relaxed text-text-faint">
-        Arms a background loop that re-checks the live decision for {symbol} every 60s and can submit one entry
-        without further confirmation, restricted to paper MT5 brokers. Disarm any time.
+        Arms a background loop that re-checks the live decision for {symbol} every 60s, restricted to paper MT5
+        brokers. For a symbol with a confirmed contract size and an order under the sign-off threshold, it submits
+        without further confirmation; otherwise the order holds for a second human to approve (Orders → Pending
+        sign-off) before it reaches the broker. Disarm any time.
       </div>
       <label className="mb-2 block">
         <span className="mb-0.5 block text-[9px] uppercase tracking-[.06em] text-text-ghost">Broker (paper MT5 only)</span>

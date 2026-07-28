@@ -230,6 +230,17 @@ export default function ExecutionPage() {
   const cc = commandCenter.data && !isNotYetComputed(commandCenter.data) && !isNoMarketData(commandCenter.data)
     ? (commandCenter.data as unknown as CommandCenterPayload)
     : null;
+  // Regime/Volatility/Liquidity below all go blank together when `cc` is
+  // null — worth saying why, since a bare "—" reads as a missing feature
+  // rather than the transient worker-cache-miss it usually is (the
+  // background intelligence_worker.py polls each symbol on a rolling
+  // cadence; a just-selected or rarely-viewed symbol can be a few seconds
+  // to minutes behind).
+  const ccBlankReason = !cc && commandCenter.data
+    ? isNotYetComputed(commandCenter.data)
+      ? "not_yet_computed"
+      : "no_market_data"
+    : null;
 
   const openPositions = positions.data?.filter((p) => p.is_open) ?? [];
   const unrealizedTotal = openPositions.reduce((sum, p) => sum + p.unrealized_pnl, 0);
@@ -285,6 +296,13 @@ export default function ExecutionPage() {
         </div>
       </div>
 
+      {ccBlankReason && (
+        <p className="mb-1.5 text-[10px] leading-relaxed text-text-ghost">
+          {ccBlankReason === "not_yet_computed"
+            ? "Waiting for the intelligence worker's next pass on this symbol — regime/volatility/liquidity below will populate shortly."
+            : "No market data available for this symbol yet."}
+        </p>
+      )}
       <div className="mb-3.5 grid grid-cols-2 gap-2.5 md:grid-cols-4">
         <RegimeCell label="Regime" value={cc?.regime?.label ?? "—"} sub={cc?.regime ? `size ×${cc.regime.size_mult}` : ""} tone="green" />
         <RegimeCell label="Volatility" value={cc?.volatility?.vol_regime ?? "—"} sub={cc?.volatility?.annualised_vol_pct != null ? `${cc.volatility.annualised_vol_pct}% ann.` : ""} tone="amber" />

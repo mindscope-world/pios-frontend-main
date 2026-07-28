@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { adoptBrokerHolding, getBrokerAccount, getBrokerReconciliation, listBrokers } from "../../api/brokers";
+import { listOrders } from "../../api/orders";
 import type { BrokerOut } from "../../api/types";
 import { getEquityCurve, getPortfolioMetrics, listPositions } from "../../api/positions";
 import { getRiskMetrics } from "../../api/risk";
@@ -20,6 +22,20 @@ export default function PortfolioPage() {
   const metrics = useQuery({ queryKey: ["portfolio-metrics"], queryFn: getPortfolioMetrics, staleTime: 20000, refetchInterval: 60000 });
   const equity = useQuery({ queryKey: ["equity-curve"], queryFn: getEquityCurve, staleTime: 30000, refetchInterval: 60000 });
   const risk = useQuery({ queryKey: ["risk-metrics"], queryFn: getRiskMetrics, staleTime: 20000, refetchInterval: 20000 });
+  // GET /orders is user-scoped for non-admins (own orders only) — unlike
+  // GET /orders/pending-signoff, which is role-gated to admin/compliance
+  // and isn't reachable by the trader who submitted the order. A trader
+  // looking at "no open positions" has no way to tell whether AUTO/semi-auto
+  // actually fired and is just held for a second human's approval — this
+  // surfaces that directly, since it's exactly the confusion that prompted
+  // this investigation (project_feedback.md §0/§3.1).
+  const pendingOrders = useQuery({
+    queryKey: ["orders", "pending-signoff-count"],
+    queryFn: () => listOrders({ status: "NEW", page_size: 200 }),
+    staleTime: 15000,
+    refetchInterval: 30000,
+  });
+  const pendingSignoffOrders = (pendingOrders.data?.items ?? []).filter((o) => o.signoff_required && !o.signoff_by);
 
   useChannelSocket("positions", undefined, (msg) => {
     if (msg.event === "position_update") {
@@ -37,6 +53,18 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-4">
+      {pendingSignoffOrders.length > 0 && (
+        <div className="rounded-[10px] border border-amber-500/40 bg-amber-500/10 p-3.5 text-[11.5px] text-amber-400">
+          <strong>{pendingSignoffOrders.length}</strong> order{pendingSignoffOrders.length === 1 ? "" : "s"} awaiting a
+          second human's sign-off before {pendingSignoffOrders.length === 1 ? "it reaches" : "they reach"} the broker
+          — not lost, and this is why they aren't showing as open positions yet. A different admin/compliance user
+          must approve or reject each one on the{" "}
+          <Link to="/risk" className="underline">
+            Risk page
+          </Link>
+          .
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-[10px] border border-surface-border bg-surface-raised">
           <div className="border-b border-surface-border px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
@@ -107,6 +135,21 @@ export default function PortfolioPage() {
         </div>
         <div className="p-4">
           <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3">
+            {/* The backend has always computed total_equity/equity_change
+               (compute_portfolio_metrics, GET /positions/metrics) — this
+               tile was simply never added to the grid, so "no balance
+               shown" wasn't a broker-connection issue, just a missing
+               render. */}
+            <Metric
+              label="Balance"
+              value={metrics.data ? `$${formatMoney(metrics.data.total_equity)}` : "—"}
+              sub={
+                metrics.data
+                  ? `${metrics.data.equity_change >= 0 ? "+" : ""}$${formatMoney(metrics.data.equity_change)} (${metrics.data.equity_change_pct >= 0 ? "+" : ""}${metrics.data.equity_change_pct.toFixed(2)}%)`
+                  : undefined
+              }
+              tone={metrics.data ? (metrics.data.equity_change >= 0 ? "pos" : "neg") : undefined}
+            />
             <Metric label="Sharpe" value={<NullableNumber value={metrics.data?.sharpe ?? null} />} />
             <Metric label="Win rate" value={<NullableNumber value={metrics.data?.win_rate ?? null} suffix="%" />} />
             <Metric label="Max drawdown" value={metrics.data ? `${metrics.data.max_drawdown}%` : "—"} />
@@ -156,13 +199,15 @@ function BrokerAccountsCard() {
     })),
   });
 
-  // Broker↔app holdings reconciliation — only Alpaca reports real broker
-  // positions today; other adapters would produce misleading empty compares.
+  // Broker↔app holdings reconciliation — Alpaca and MT5 (via the EA's
+  // GET_POSITIONS reply) both report real broker positions in the shape
+  // GET /brokers/{id}/reconciliation expects; other adapters would produce
+  // misleading empty compares until verified the same way.
   const reconciliations = useQueries({
     queries: activeBrokers.map((b) => ({
       queryKey: ["broker-reconciliation", b.id],
       queryFn: () => getBrokerReconciliation(b.id),
-      enabled: b.broker_type === "ALPACA",
+      enabled: b.broker_type === "ALPACA" || b.broker_type === "MT5",
       staleTime: 30000,
       refetchInterval: 60000,
       retry: 1,
@@ -258,11 +303,22 @@ function BrokerAccountsCard() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: ReactNode }) {
+function Metric({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: string;
+  tone?: "pos" | "neg";
+}) {
   return (
     <div className="flex flex-col gap-0.5">
       <div className="text-[9px] uppercase tracking-[.06em] text-text-faint">{label}</div>
       <div className="text-[13px] font-semibold text-text-primary">{value}</div>
+      {sub && <div className={`text-[10px] font-medium ${tone === "neg" ? "text-red" : "text-green"}`}>{sub}</div>}
     </div>
   );
 }

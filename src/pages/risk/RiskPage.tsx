@@ -38,11 +38,27 @@ export default function RiskPage() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="VaR 95%" value={metrics.data?.var95 ?? null} />
+        <Stat
+          label="VaR 95%"
+          value={metrics.data?.var95 ?? null}
+          badge={
+            metrics.data?.var_source === "fallback_estimate"
+              ? "Estimated"
+              : metrics.data?.var_source === "garch_parametric"
+                ? "GARCH est."
+                : undefined
+          }
+        />
         <Stat label="Drawdown / Limit" value={metrics.data?.drawdown_current ?? null} suffix={metrics.data ? `% / ${metrics.data.drawdown_limit}%` : ""} />
         <Stat label="Leverage" value={metrics.data?.leverage ?? null} />
         <Stat label="Daily Loss / Limit" value={metrics.data?.daily_loss ?? null} suffix={metrics.data ? ` / ${metrics.data.daily_loss_limit}` : ""} />
       </div>
+      {metrics.data?.equity_is_estimated && (
+        <p className="-mt-1 text-[10.5px] leading-relaxed text-amber-400">
+          No real balance history yet for this account — VaR/CVaR above are computed off a placeholder $100,000
+          equity, not your real account balance. This will resolve once at least one trade has filled.
+        </p>
+      )}
 
       <div className="rounded-[10px] border border-surface-border bg-surface-raised">
         <div className="border-b border-surface-border px-4 py-3 text-[10.5px] font-bold uppercase tracking-[.08em] text-text-faint">
@@ -99,7 +115,11 @@ export default function RiskPage() {
             System status
           </div>
           <div className="p-4">
-            <Row label="Kill switch" value={metrics.data ? (metrics.data.kill_switch_armed ? "Armed" : "Not armed") : "—"} tone={metrics.data?.kill_switch_armed ? "pos" : "neg"} />
+            {/* kill_switch_armed is a static readiness flag (there is no
+               server-side pause/resume toggle -- POST /risk/killswitch is a
+               one-shot cancel-and-close action), not a live armed/disarmed
+               state. "Ready"/"Unavailable" avoids implying otherwise. */}
+            <Row label="Kill switch" value={metrics.data ? (metrics.data.kill_switch_armed ? "Ready" : "Unavailable") : "—"} tone={metrics.data?.kill_switch_armed ? "pos" : "neg"} />
             <Row label="Triggers today" value={metrics.data ? String(metrics.data.triggers_today) : "—"} last />
             <p className="mt-3 text-[10.5px] leading-relaxed text-text-faint">
               The kill control lives in the topbar (hold to arm, then confirm) and fires a real one-shot cancel-all /
@@ -293,10 +313,17 @@ export default function RiskPage() {
   );
 }
 
-function Stat({ label, value, suffix = "" }: { label: string; value: number | null; suffix?: string }) {
+function Stat({ label, value, suffix = "", badge }: { label: string; value: number | null; suffix?: string; badge?: string }) {
   return (
     <div className="rounded-lg border border-surface-border bg-surface-card p-3">
-      <p className="text-xs text-text-muted">{label}</p>
+      <div className="flex items-center justify-between gap-1.5">
+        <p className="text-xs text-text-muted">{label}</p>
+        {badge && (
+          <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[8.5px] uppercase tracking-[.05em] text-amber-400">
+            {badge}
+          </span>
+        )}
+      </div>
       <p className="font-mono text-lg text-text-primary">
         <NullableNumber value={value} />
         {suffix}

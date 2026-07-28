@@ -23,9 +23,9 @@ export function StatusPill() {
       }`}
     >
       <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${elevated ? "" : "animate-pulse"} bg-current`} />
-      <span>{elevated ? (armed ? "Elevated" : "Not Armed") : "Nominal"}</span>
+      <span>{elevated ? (armed ? "Elevated" : "Unavailable") : "Nominal"}</span>
       <span className="font-normal text-text-faint">
-        {armed ? `Kill switch armed · ${triggers} trigger${triggers === 1 ? "" : "s"} today` : "Kill switch not armed"}
+        {armed ? `Kill switch ready · ${triggers} trigger${triggers === 1 ? "" : "s"} today` : "Kill switch unavailable"}
       </span>
     </div>
   );
