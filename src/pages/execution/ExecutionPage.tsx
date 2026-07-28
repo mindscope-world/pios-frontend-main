@@ -69,16 +69,28 @@ interface CommandCenterPayload {
   volatility?: { vol_regime?: "HIGH" | "MEDIUM" | "LOW"; annualised_vol_pct?: number | null };
   regime?: { label?: string; confidence?: number; size_mult?: number };
   risk_state?: string;
-  // General ATR-based convention (1.5x ATR-14 stop, fixed 2:1 reward:risk
-  // target) — not a specific strategy's own configured exit rule. null
-  // when ATR/entry/direction aren't all available (see basis_note).
+  // Entry/stop from the real proprietary strategy that owns the current
+  // regime (OFI Momentum for BULL/BEAR, OU Mean Reversion for RANGE, GARCH
+  // Breakout for CRISIS) — null whenever that strategy has no live entry
+  // signal right now, or the regime (RECOVERY) has no owning strategy. No
+  // `target`/`risk_reward` — none of the 5 strategies define a fixed
+  // take-profit; basis_note describes the real exit condition instead.
   suggested_levels?: {
     entry: number;
     stop: number;
-    target: number;
     direction: "LONG" | "SHORT";
-    risk_reward: number;
+    strategy_key: string;
     basis_note: string;
+  } | null;
+  // Always present (when the regime has an owning strategy) even with no
+  // suggested_levels, so the UI can say *why* nothing is suggested right
+  // now instead of a single unexplained blank state.
+  live_strategy_signal?: {
+    strategy_key: string | null;
+    direction: "LONG" | "SHORT" | null;
+    regime_ok: boolean;
+    exit_rule: string | null;
+    diagnostics: Record<string, unknown>;
   } | null;
 }
 
@@ -391,15 +403,18 @@ export default function ExecutionPage() {
                   <div className="mb-2.5 grid grid-cols-2 gap-x-3.5 gap-y-1.5 rounded-md border border-dashed border-surface-border-strong p-2.5">
                     <RiskCell label="Entry" value={cc.suggested_levels.entry.toLocaleString()} />
                     <RiskCell label="Stop" value={cc.suggested_levels.stop.toLocaleString()} tone="neg" />
-                    <RiskCell label="Target" value={cc.suggested_levels.target.toLocaleString()} tone="pos" />
-                    <RiskCell label="R:R" value={`${cc.suggested_levels.risk_reward.toFixed(1)}:1`} />
+                    <RiskCell label="Strategy" value={cc.suggested_levels.strategy_key} />
                     <p className="col-span-2 text-[10px] leading-relaxed text-text-ghost">{cc.suggested_levels.basis_note}</p>
                   </div>
+                ) : cc.live_strategy_signal?.strategy_key ? (
+                  <p className="mb-2.5 text-[10px] leading-relaxed text-text-ghost">
+                    No live entry signal right now from {cc.live_strategy_signal.strategy_key} (the strategy that
+                    owns the {cc.regime?.label ?? "current"} regime). {cc.live_strategy_signal.exit_rule ?? ""}
+                  </p>
                 ) : (
                   <p className="mb-2.5 text-[10px] leading-relaxed text-text-ghost">
-                    Concrete entry/stop/target levels aren't available for {symbol} right now — insufficient tick
-                    history for ATR, or the current regime ({cc.regime?.label ?? "unknown"}) gives no directional
-                    bias.
+                    Concrete entry/stop levels aren't available for {symbol} right now — insufficient tick history,
+                    or the current regime ({cc.regime?.label ?? "unknown"}) has no strategy wired in for direction.
                   </p>
                 )}
                 <ModeActions
