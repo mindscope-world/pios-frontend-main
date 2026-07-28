@@ -70,11 +70,13 @@ interface CommandCenterPayload {
   regime?: { label?: string; confidence?: number; size_mult?: number };
   risk_state?: string;
   // Entry/stop from the real proprietary strategy that owns the current
-  // regime (OFI Momentum for BULL/BEAR, OU Mean Reversion for RANGE, GARCH
-  // Breakout for CRISIS) — null whenever that strategy has no live entry
-  // signal right now, or the regime (RECOVERY) has no owning strategy. No
-  // `target`/`risk_reward` — none of the 5 strategies define a fixed
-  // take-profit; basis_note describes the real exit condition instead.
+  // regime (OFI Momentum for BULL/BEAR/RECOVERY, OU Mean Reversion for
+  // RANGE, GARCH Breakout for CRISIS), or from Hurst Adaptive Meta's
+  // fallback (strategy_key: "HURST_ADAPTIVE_META", via_hurst_fallback on
+  // live_strategy_signal below) when the owner has no live signal right
+  // now — null when neither has one. No `target`/`risk_reward` — none of
+  // the 5 strategies define a fixed take-profit; basis_note describes the
+  // real exit condition instead.
   suggested_levels?: {
     entry: number;
     stop: number;
@@ -82,15 +84,17 @@ interface CommandCenterPayload {
     strategy_key: string;
     basis_note: string;
   } | null;
-  // Always present (when the regime has an owning strategy) even with no
-  // suggested_levels, so the UI can say *why* nothing is suggested right
-  // now instead of a single unexplained blank state.
+  // Always present (every regime label this codebase can produce now has
+  // an owning strategy) even with no suggested_levels, so the UI can say
+  // *why* nothing is suggested right now instead of a single unexplained
+  // blank state.
   live_strategy_signal?: {
     strategy_key: string | null;
     direction: "LONG" | "SHORT" | null;
     regime_ok: boolean;
     exit_rule: string | null;
     diagnostics: Record<string, unknown>;
+    via_hurst_fallback?: boolean;
   } | null;
 }
 
