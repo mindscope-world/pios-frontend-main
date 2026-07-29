@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listBrokers } from "../../api/brokers";
 import { createOrder, confirmDecision } from "../../api/orders";
 import { ApiError } from "../../api/client";
-import { useExecutionModeStore } from "../../stores/executionModeStore";
 import { useAuthStore } from "../../stores/authStore";
 import { isAlgorithmicOrderType, isConditionalOrderType, type OrderSide, type OrderType } from "../../api/types";
 import { AutomaticControl } from "./AutomaticControl";
@@ -20,6 +19,11 @@ const TRADE_EXEC_ROLES = new Set(["admin", "trader"]);
  * background engine per symbol via POST /auto-execution/arm|disarm (paper
  * MT5 brokers only, ~60s cadence, three circuit breakers — see
  * AutomaticControl.tsx and app/services/auto_execution_service.py).
+ *
+ * Which control renders is driven by the account-level trading mode
+ * (User.preferences.trading_mode, set via TradingModeSelector.tsx and
+ * enforced server-side) — not a separate client-only toggle, so this can
+ * never disagree with what the backend will actually allow.
  */
 export function ModeActions({
   symbol,
@@ -42,11 +46,14 @@ export function ModeActions({
   // strategy is actually firing (OFI z-score sign, OU z-score sign, etc.).
   liveDirection?: "LONG" | "SHORT" | null;
 }) {
-  const mode = useExecutionModeStore((s) => s.mode);
-  const role = useAuthStore((s) => s.user?.role);
+  const user = useAuthStore((s) => s.user);
+  const role = user?.role;
   const canTrade = role ? TRADE_EXEC_ROLES.has(role) : false;
+  // Same field, same default as TradingModeSelector.tsx — must never
+  // disagree with the control that actually sets this preference.
+  const mode = (user?.preferences?.trading_mode as string | undefined) ?? "SEMI_AUTOMATIC";
 
-  if (mode === "manual") {
+  if (mode === "MANUAL") {
     if (!canTrade) {
       return (
         <div className="rounded-lg border border-dashed border-surface-border-strong p-3 text-[11px] text-text-faint">
@@ -56,7 +63,7 @@ export function ModeActions({
     }
     return <ManualTicket symbol={symbol} suggestedQty={suggestedQty} referencePrice={referencePrice ?? null} />;
   }
-  if (mode === "semi") {
+  if (mode === "SEMI_AUTOMATIC") {
     if (!canTrade) {
       return (
         <div className="rounded-lg border border-dashed border-surface-border-strong p-3 text-[11px] text-text-faint">

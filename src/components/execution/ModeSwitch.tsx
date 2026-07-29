@@ -1,14 +1,48 @@
-import { useExecutionModeStore, type ExecutionMode } from "../../stores/executionModeStore";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { updateUser } from "../../api/users";
+import { useAuthStore } from "../../stores/authStore";
+import { usePendingModeStore } from "../../stores/executionModeStore";
 
-const SEGMENTS: { m: ExecutionMode; label: string }[] = [
-  { m: "manual", label: "Manual" },
-  { m: "semi", label: "Semi-auto" },
-  { m: "automatic", label: "Automatic" },
+const SEGMENTS: { m: string; label: string }[] = [
+  { m: "MANUAL", label: "Manual" },
+  { m: "SEMI_AUTOMATIC", label: "Semi-auto" },
+  { m: "AUTOMATIC", label: "Automatic" },
 ];
 
+// Header shortcut for the same account-level setting TradingModeSelector.tsx
+// sets on the Execution page (User.preferences.trading_mode) -- reads/writes
+// the identical field so the two controls can never show different modes.
 export function ModeSwitch() {
-  const mode = useExecutionModeStore((s) => s.mode);
-  const requestMode = useExecutionModeStore((s) => s.requestMode);
+  const user = useAuthStore((s) => s.user);
+  const patchUser = useAuthStore((s) => s.patchUser);
+  const queryClient = useQueryClient();
+  const requestAutomatic = usePendingModeStore((s) => s.requestAutomatic);
+
+  const mode = (user?.preferences?.trading_mode as string | undefined) ?? "SEMI_AUTOMATIC";
+
+  const setMode = useMutation({
+    mutationFn: (next: string) => {
+      if (!user) throw new Error("Not signed in.");
+      return updateUser(user.id, { preferences: { ...user.preferences, trading_mode: next } });
+    },
+    onSuccess: (updated) => {
+      patchUser({ preferences: updated.preferences });
+      queryClient.invalidateQueries({ queryKey: ["auto-execution"] });
+    },
+  });
+
+  if (!user) return null;
+
+  const select = (next: string) => {
+    // Escalating autonomy (anything -> AUTOMATIC) requires confirmation;
+    // de-escalating is instant, on purpose (recovering control under stress
+    // should never be blocked).
+    if (next === "AUTOMATIC" && mode !== "AUTOMATIC") {
+      requestAutomatic();
+      return;
+    }
+    setMode.mutate(next);
+  };
 
   return (
     <div className="flex flex-col gap-[3px]">
@@ -17,8 +51,9 @@ export function ModeSwitch() {
         {SEGMENTS.map((seg, i) => (
           <button
             key={seg.m}
-            onClick={() => requestMode(seg.m)}
-            className={`px-3 py-1.5 text-[10.5px] transition ${i < SEGMENTS.length - 1 ? "border-r border-surface-border" : ""} ${
+            disabled={setMode.isPending}
+            onClick={() => select(seg.m)}
+            className={`px-3 py-1.5 text-[10.5px] transition disabled:opacity-50 ${i < SEGMENTS.length - 1 ? "border-r border-surface-border" : ""} ${
               mode === seg.m ? "bg-blue-bg font-bold text-blue" : "text-text-faint hover:text-text-muted"
             }`}
           >
@@ -31,11 +66,26 @@ export function ModeSwitch() {
 }
 
 export function ConfirmAutomaticModal() {
-  const pendingMode = useExecutionModeStore((s) => s.pendingMode);
-  const confirm = useExecutionModeStore((s) => s.confirmPendingMode);
-  const cancel = useExecutionModeStore((s) => s.cancelPendingMode);
+  const user = useAuthStore((s) => s.user);
+  const patchUser = useAuthStore((s) => s.patchUser);
+  const queryClient = useQueryClient();
+  const pending = usePendingModeStore((s) => s.pendingAutomatic);
+  const cancel = usePendingModeStore((s) => s.cancelAutomatic);
+  const confirmPending = usePendingModeStore((s) => s.confirmAutomatic);
 
-  if (pendingMode !== "automatic") return null;
+  const setMode = useMutation({
+    mutationFn: () => {
+      if (!user) throw new Error("Not signed in.");
+      return updateUser(user.id, { preferences: { ...user.preferences, trading_mode: "AUTOMATIC" } });
+    },
+    onSuccess: (updated) => {
+      patchUser({ preferences: updated.preferences });
+      queryClient.invalidateQueries({ queryKey: ["auto-execution"] });
+      confirmPending();
+    },
+  });
+
+  if (!pending) return null;
 
   return (
     <div className="fixed inset-0 z-[900] flex items-center justify-center bg-black/70 p-4">
@@ -63,10 +113,11 @@ export function ConfirmAutomaticModal() {
             Cancel
           </button>
           <button
-            onClick={confirm}
-            className="flex-1 rounded-lg border border-green-border bg-green-bg px-4 py-2 text-[11.5px] font-semibold text-green"
+            disabled={setMode.isPending}
+            onClick={() => setMode.mutate()}
+            className="flex-1 rounded-lg border border-green-border bg-green-bg px-4 py-2 text-[11.5px] font-semibold text-green disabled:opacity-50"
           >
-            Confirm
+            {setMode.isPending ? "Confirming…" : "Confirm"}
           </button>
         </div>
       </div>
