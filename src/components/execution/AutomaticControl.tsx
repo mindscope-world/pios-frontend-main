@@ -19,6 +19,17 @@ function relativeTime(iso: string | null): string {
   return `${Math.floor(minutes / 60)}h ago`;
 }
 
+// Forex/metal rows exist under two spellings server-side (EUR/USD from the
+// OANDA picker, EURUSD as the MT5-native row that arming actually resolves
+// to via get_symbol_by_name -- see helpers.py's dedup comment). An armed
+// row's own `symbol.symbol` always reflects whichever row it actually
+// resolved to, which for MT5 is the slash-less spelling -- comparing it
+// against the picker's slash-form symbol string with `===` never matches,
+// so the freshly-armed row looked "not armed" on the very next refetch.
+function normalizeSym(s: string): string {
+  return s.replace(/\//g, "").toUpperCase();
+}
+
 const DISARM_REASON_LABEL: Record<string, string> = {
   user_disarm: "Disarmed manually",
   kill_switch: "Disarmed by kill switch",
@@ -58,7 +69,9 @@ export function AutomaticControl({ symbol }: { symbol: string }) {
     }
   });
 
-  const rowsForSymbol = (status.data ?? []).filter((r) => r.symbol?.symbol === symbol);
+  const rowsForSymbol = (status.data ?? []).filter(
+    (r) => normalizeSym(r.symbol?.symbol ?? "") === normalizeSym(symbol),
+  );
   const armedRow = rowsForSymbol.find((r) => r.is_armed) ?? null;
   // Most-recently-touched row for this symbol, armed or not, so a tripped/
   // disarmed banner can show *why* even though nothing is armed right now.

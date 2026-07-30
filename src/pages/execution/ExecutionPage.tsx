@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getAlpacaCryptoSymbols,
   getOandaForexSymbols,
@@ -118,7 +118,18 @@ function normalizeSym(s: string): string {
 }
 
 export default function ExecutionPage() {
-  const [symbol, setSymbol] = useState(DEFAULT_CRYPTO_SYMBOLS[0]);
+  // Persisted in the URL, not plain useState -- this page unmounts on every
+  // route navigation (e.g. Execution -> Risk -> Execution), and a bare
+  // useState reset back to the crypto default made an armed AUTO symbol
+  // (e.g. XAU/USD) look "no longer live" on return, even though the arming
+  // itself is real server-side state untouched by the navigation.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const symbol = searchParams.get("symbol") || DEFAULT_CRYPTO_SYMBOLS[0];
+  const setSymbol = (next: string) => setSearchParams((prev) => {
+    const merged = new URLSearchParams(prev);
+    merged.set("symbol", next);
+    return merged;
+  }, { replace: true });
   const [picker, setPicker] = useState<"crypto" | "forex" | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
