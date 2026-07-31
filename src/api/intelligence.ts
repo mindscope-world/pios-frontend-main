@@ -250,4 +250,5 @@ export interface QuantCoreGate {
   latency_ms: number;
 }
 
-export const getQuantCoreGates = () => apiFetch<QuantCoreGate[]>("/intelligence/quant-core/gates");
+export const getQuantCoreGates = (symbol?: string) =>
+  apiFetch<{ symbol: string | null; gates: QuantCoreGate[] }>(`/intelligence/quant-core/gates${buildQuery({ symbol })}`);

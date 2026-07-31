@@ -56,6 +56,13 @@ const SYMBOL_SCOPED: ReadonlySet<TabId> = new Set([
   "adaptation",
   "markets",
   "features",
+  // Found live 2026-07-31: the gates endpoint always evaluated the
+  // account-wide auto-detected primary symbol, with no way to pick a
+  // different one and no indication in the UI of which symbol it was
+  // even showing -- now takes a symbol param (intelligence.py's
+  // quant_core_gates), so the selector belongs here like every other
+  // per-symbol tab.
+  "gates",
 ]);
 
 const TAB_IDS: ReadonlySet<string> = new Set(TABS.map((t) => t.id));
@@ -137,7 +144,7 @@ export default function IntelligencePage() {
       {tab === "adaptation" && <AdaptationTab symbol={symbol ?? undefined} />}
       {tab === "alpha" && <AlphaDarwinTab symbol={symbol ?? undefined} />}
       {tab === "scenarios" && <ScenariosTab symbol={symbol ?? undefined} />}
-      {tab === "gates" && <QuantCoreGatesTab />}
+      {tab === "gates" && <QuantCoreGatesTab symbol={symbol ?? undefined} />}
       {tab === "markets" && <MarketsTab symbol={symbol ?? undefined} />}
       {tab === "features" && <FeaturesTab symbol={symbol ?? undefined} />}
     </div>

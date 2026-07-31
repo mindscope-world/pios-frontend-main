@@ -3,18 +3,22 @@ import { getQuantCoreGates } from "../../api/intelligence";
 import { NullableNumber } from "../ui/NullableNumber";
 import { Card, Loading, Pill } from "./shared";
 
-export function QuantCoreGatesTab() {
+export function QuantCoreGatesTab({ symbol }: { symbol?: string }) {
   const gates = useQuery({
-    queryKey: ["quant-core-gates"],
-    queryFn: getQuantCoreGates,
+    queryKey: ["quant-core-gates", symbol ?? "auto"],
+    queryFn: () => getQuantCoreGates(symbol),
     staleTime: 20000,
     refetchInterval: 20000,
   });
 
-  const list = gates.data ?? [];
+  const list = gates.data?.gates ?? [];
+  const resolvedSymbol = gates.data?.symbol;
 
   return (
-    <Card title="Quant Core — 8-gate pipeline" right={list.length > 0 && <Pill tone={list.every((g) => g.passed) ? "green" : "amber"}>{list.filter((g) => g.passed).length}/{list.length} passed</Pill>}>
+    <Card
+      title={`Quant Core — 8-gate pipeline${resolvedSymbol ? ` · ${resolvedSymbol}` : ""}`}
+      right={list.length > 0 && <Pill tone={list.every((g) => g.passed) ? "green" : "amber"}>{list.filter((g) => g.passed).length}/{list.length} passed</Pill>}
+    >
       {gates.isPending ? (
         <Loading />
       ) : list.length === 0 ? (
