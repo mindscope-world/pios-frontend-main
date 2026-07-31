@@ -145,10 +145,16 @@ export default function PortfolioPage() {
               value={metrics.data ? `$${formatMoney(metrics.data.total_equity)}` : "—"}
               sub={
                 metrics.data
-                  ? `${metrics.data.equity_change >= 0 ? "+" : ""}$${formatMoney(metrics.data.equity_change)} (${metrics.data.equity_change_pct >= 0 ? "+" : ""}${metrics.data.equity_change_pct.toFixed(2)}%)`
+                  ? metrics.data.equity_is_estimated
+                    ? "Estimated — no real balance history yet"
+                    : `${metrics.data.equity_change >= 0 ? "+" : ""}$${formatMoney(metrics.data.equity_change)} (${metrics.data.equity_change_pct >= 0 ? "+" : ""}${metrics.data.equity_change_pct.toFixed(2)}%)`
                   : undefined
               }
-              tone={metrics.data ? (metrics.data.equity_change >= 0 ? "pos" : "neg") : undefined}
+              tone={
+                metrics.data && !metrics.data.equity_is_estimated
+                  ? (metrics.data.equity_change >= 0 ? "pos" : "neg")
+                  : undefined
+              }
             />
             <Metric label="Sharpe" value={<NullableNumber value={metrics.data?.sharpe ?? null} />} />
             <Metric label="Win rate" value={<NullableNumber value={metrics.data?.win_rate ?? null} suffix="%" />} />

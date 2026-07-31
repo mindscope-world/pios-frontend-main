@@ -255,6 +255,9 @@ export interface EquityPoint {
 
 export interface PortfolioMetricsOut {
   total_equity: number;
+  // True when there's no real balance history yet and total_equity is a
+  // $100,000 placeholder, not this account's real balance.
+  equity_is_estimated: boolean;
   equity_change: number;
   equity_change_pct: number;
   realized_pnl: number;
@@ -365,6 +368,10 @@ export interface CapitalPreservationStatusOut {
   configured: boolean;
   goal_equity: number | null;
   current_equity: number | null;
+  // True when current_equity is a $100,000 placeholder (no real PnLSnapshot
+  // yet) -- goal_met is always forced false in that case server-side, since
+  // a fabricated balance can't be evidence a real goal was reached.
+  equity_is_estimated: boolean;
   progress_pct: number | null;
   goal_met: boolean;
   stopping_zone_active: boolean;

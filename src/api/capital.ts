@@ -43,6 +43,10 @@ export interface ClockConflictOut {
 export interface ReallocationPlanOut {
   speed: "FREEZE" | "FAST" | "NORMAL" | "SLOW";
   reason: string;
+  // Why PRS reliability came back UNKNOWN (e.g. "no graded decisions yet")
+  // -- null once a real tier was actually computed. Was silently dropped
+  // before reaching the frontend, which just showed a bare UNKNOWN.
+  prs_note: string | null;
 }
 
 export interface ClockBandsOut {
@@ -54,10 +58,17 @@ export interface ClockBandsOut {
 
 export interface CapitalAllocationOut {
   total_equity: number;
+  // True when there's no real PnLSnapshot yet and total_equity/cash_pct are
+  // a $100,000/20%-cash placeholder starting point for this endpoint's own
+  // math, not a real balance -- same disclosure convention risk.ts's
+  // equity_is_estimated already uses for the identical situation.
+  equity_is_estimated: boolean;
   cash_pct: number;
   deployed_pct: number;
   rebalance_needed: boolean;
-  last_rebalanced_at: string;
+  // null when this account has never actually rebalanced (no real
+  // KillSwitchEvent) -- was previously a fabricated "3 days ago".
+  last_rebalanced_at: string | null;
   optimiser_mode: string;
   slices: CapitalSlice[];
   clock_bands: ClockBandsOut;

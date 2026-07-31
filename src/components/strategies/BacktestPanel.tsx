@@ -17,7 +17,22 @@ function hasActiveJob(jobs: BacktestJobOut[] | undefined) {
   return !!jobs?.some((j) => j.status === "QUEUED" || j.status === "RUNNING");
 }
 
-export function BacktestPanel({ strategyId }: { strategyId: string }) {
+export function BacktestPanel({
+  strategyId,
+  allowedSymbols = null,
+}: {
+  strategyId: string;
+  // The strategy's own Strategy.allowed_symbols (ticker strings), when set.
+  // Was previously ignored entirely -- this form's symbol field defaulted
+  // to a hardcoded "BTC/USDT" for every strategy regardless of what it's
+  // actually scoped to, which is very likely the mechanical cause behind a
+  // "why does the Backtest screen only ever seem to run on BTC" report:
+  // nothing stopped a user from just clicking Run without noticing/editing
+  // the field. Found live 2026-07-31 tracing that report; see also
+  // all_schemas.py's StrategyOut fix (the field was write-only before this
+  // pass, so the frontend had no value to default from even if it had tried).
+  allowedSymbols?: string[] | null;
+}) {
   const queryClient = useQueryClient();
   const jobs = useQuery({
     queryKey: ["backtest-jobs", strategyId],
@@ -30,11 +45,21 @@ export function BacktestPanel({ strategyId }: { strategyId: string }) {
   oneYearAgo.setFullYear(today.getFullYear() - 1);
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
+  const defaultSymbols = allowedSymbols && allowedSymbols.length > 0 ? allowedSymbols.join(", ") : "BTC/USDT";
   const [startDate, setStartDate] = useState(fmt(oneYearAgo));
   const [endDate, setEndDate] = useState(fmt(today));
-  const [symbolsInput, setSymbolsInput] = useState("BTC/USDT");
+  const [symbolsInput, setSymbolsInput] = useState(defaultSymbols);
   const [costModel, setCostModel] = useState<CostModel>("FULL");
   const [error, setError] = useState<string | null>(null);
+
+  // strategyId changes when the user picks a different strategy from
+  // BacktestPage's dropdown -- this component doesn't remount (same route),
+  // so without this the symbol field would keep showing the *previous*
+  // strategy's default/typed value instead of the newly-selected one's.
+  useEffect(() => {
+    setSymbolsInput(defaultSymbols);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategyId, defaultSymbols]);
 
   const submit = useMutation({
     mutationFn: () =>

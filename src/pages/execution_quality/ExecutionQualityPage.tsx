@@ -107,7 +107,9 @@ export default function ExecutionQualityPage() {
                       className="cursor-pointer border-b border-surface-border last:border-0 hover:bg-white/[.02]"
                     >
                       <td className="px-2.5 py-2.5 font-semibold text-text-primary">{f.symbol}</td>
-                      <td className="px-2.5 py-2.5 font-mono text-text-faint">{new Date(f.last_tick_at).toLocaleTimeString()}</td>
+                      <td className="px-2.5 py-2.5 font-mono text-text-faint">
+                        {f.last_tick_at ? new Date(f.last_tick_at).toLocaleTimeString() : "Never"}
+                      </td>
                       <td className="px-2.5 py-2.5 font-mono">{f.age_ms} ms</td>
                       <td className="px-2.5 py-2.5 font-mono">{f.sync_drift_ms} ms</td>
                       <td className="px-2.5 py-2.5">

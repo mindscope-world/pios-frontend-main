@@ -31,7 +31,15 @@ interface DecisionCurrentPayload {
   execution_path: string;
   risk_state: string;
   behavior_score: number;
-  portfolio: { total_equity: number; total_exposure: number; exposure_pct: number; open_positions: number };
+  portfolio: {
+    total_equity: number;
+    // True when there's no real balance history yet and total_equity is a
+    // $100,000 placeholder, not this account's real balance.
+    equity_is_estimated: boolean;
+    total_exposure: number;
+    exposure_pct: number;
+    open_positions: number;
+  };
 }
 
 interface DecisionTrace {
@@ -256,7 +264,10 @@ export function OverviewTab({ symbol }: { symbol?: string }) {
               </div>
               <div>
                 <Row label="Behavior score" value={`${dc.behavior_score}%`} />
-                <Row label="Portfolio equity" value={`$${dc.portfolio.total_equity.toLocaleString()}`} />
+                <Row
+                  label="Portfolio equity"
+                  value={`$${dc.portfolio.total_equity.toLocaleString()}${dc.portfolio.equity_is_estimated ? " (est.)" : ""}`}
+                />
                 <Row label="Exposure" value={`${dc.portfolio.exposure_pct}% · ${dc.portfolio.open_positions} open`} last />
               </div>
               <p className="col-span-full mt-2 rounded-md border border-surface-border bg-surface-card p-2.5 font-mono text-[10.5px] text-text-faint">

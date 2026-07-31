@@ -27,3 +27,20 @@ export function disarmAutoExecution(payload: AutoExecutionDisarmPayload) {
 export function getAutoExecutionStatus() {
   return apiFetch<AutoExecutionArmingOut[]>("/auto-execution/status");
 }
+
+// Account-level replacement for arm/disarm in Automatic mode (owner
+// feedback, 2026-07-30): the system picks which eligible symbols to watch
+// instead of the user picking one. One toggle, not a per-symbol form — see
+// app/services/auto_execution_service.py's "Account-level capital
+// allocation" section.
+export function enableAutoAllocation() {
+  return apiFetch<AutoExecutionArmingOut[]>("/auto-execution/enable-allocation", {
+    method: "POST",
+  });
+}
+
+export function disableAutoAllocation() {
+  return apiFetch<AutoExecutionArmingOut[]>("/auto-execution/disable-allocation", {
+    method: "POST",
+  });
+}

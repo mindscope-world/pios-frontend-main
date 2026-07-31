@@ -86,7 +86,12 @@ export default function BacktestPage() {
         ) : null}
       </div>
 
-      {selectedId && (canManage ? <BacktestPanel strategyId={selectedId} /> : <BacktestStatusView strategyId={selectedId} />)}
+      {selectedId &&
+        (canManage ? (
+          <BacktestPanel strategyId={selectedId} allowedSymbols={selected?.allowed_symbols ?? null} />
+        ) : (
+          <BacktestStatusView strategyId={selectedId} />
+        ))}
     </div>
   );
 }

@@ -321,7 +321,11 @@ export default function StrategyDetailPage() {
         )}
       </div>
 
-      {canManage ? <BacktestPanel strategyId={strategyId} /> : <BacktestStatusView strategyId={strategyId} />}
+      {canManage ? (
+        <BacktestPanel strategyId={strategyId} allowedSymbols={strategy.data?.allowed_symbols ?? null} />
+      ) : (
+        <BacktestStatusView strategyId={strategyId} />
+      )}
 
       <KellySizingCard strategyId={strategyId} />
 

@@ -88,7 +88,7 @@ export function ModeActions({
       </div>
     );
   }
-  return <AutomaticControl symbol={symbol} />;
+  return <AutomaticControl />;
 }
 
 // Ticket-supported order types — all eight now have real backend semantics:

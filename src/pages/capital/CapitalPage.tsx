@@ -62,8 +62,18 @@ export default function CapitalPage() {
           <p className="p-4 text-sm text-text-muted">No allocation data available.</p>
         ) : (
           <>
+            {a.equity_is_estimated && (
+              <p className="mx-4 mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-[10.5px] text-amber-400">
+                No real balance snapshot exists for this account yet — the figures below are a $100,000 / 20%-cash
+                placeholder starting point, not a real portfolio.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
-              <Metric label="Total equity" value={`$${a.total_equity.toLocaleString()}`} />
+              <Metric
+                label="Total equity"
+                value={`$${a.total_equity.toLocaleString()}`}
+                sublabel={a.equity_is_estimated ? "Estimated" : undefined}
+              />
               <Metric label="Cash %" value={`${a.cash_pct}%`} />
               <Metric label="Deployed %" value={`${a.deployed_pct}%`} />
               <Metric
@@ -73,7 +83,7 @@ export default function CapitalPage() {
               />
             </div>
             <p className="px-4 pb-3 text-[10.5px] text-text-faint">
-              Last rebalanced {new Date(a.last_rebalanced_at).toLocaleString()}
+              {a.last_rebalanced_at ? `Last rebalanced ${new Date(a.last_rebalanced_at).toLocaleString()}` : "Never rebalanced"}
             </p>
 
             {rebalanceResult && (
@@ -203,6 +213,7 @@ function ClockBandsCard({ clockBands }: { clockBands: ClockBandsOut }) {
       <p className="px-4 py-3 text-[10.5px] leading-relaxed text-text-faint">
         Reallocation speed: <span className="font-semibold text-text-primary">{reallocation_plan.speed}</span> —{" "}
         {reallocation_plan.reason}
+        {reallocation_plan.prs_note && ` (${reallocation_plan.prs_note})`}
       </p>
     </div>
   );
@@ -224,12 +235,15 @@ function ReallocationBadge({ plan }: { plan: { speed: string } }) {
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: string; tone?: "green" | "amber" }) {
+function Metric({
+  label, value, tone, sublabel,
+}: { label: string; value: string; tone?: "green" | "amber"; sublabel?: string }) {
   const toneClass = tone === "green" ? "text-green" : tone === "amber" ? "text-amber" : "text-text-primary";
   return (
     <div className="flex flex-col gap-0.5">
       <div className="text-[9px] uppercase tracking-[.06em] text-text-faint">{label}</div>
       <div className={`text-[13px] font-semibold ${toneClass}`}>{value}</div>
+      {sublabel && <div className="text-[9px] font-semibold uppercase tracking-[.04em] text-amber">{sublabel}</div>}
     </div>
   );
 }

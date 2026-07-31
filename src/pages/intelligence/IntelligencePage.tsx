@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AdaptationTab } from "../../components/intelligence/AdaptationTab";
 import { AlphaDarwinTab } from "../../components/intelligence/AlphaDarwinTab";
 import { FeaturesTab } from "../../components/intelligence/FeaturesTab";
@@ -58,12 +58,37 @@ const SYMBOL_SCOPED: ReadonlySet<TabId> = new Set([
   "features",
 ]);
 
+const TAB_IDS: ReadonlySet<string> = new Set(TABS.map((t) => t.id));
+
 export default function IntelligencePage() {
+  // Persisted in the URL (?symbol=&tab=), not component state -- component
+  // state resets to the BTC/USDT/"overview" defaults on every remount (e.g.
+  // navigating Intelligence -> Execution -> back), the same bug
+  // ExecutionPage.tsx's own symbol selector had until 2026-07-30's fix
+  // (final_implementation.md §14.2). This page had the identical anti-
+  // pattern, just never caught by that pass since it touched ExecutionPage
+  // only.
+  const [searchParams, setSearchParams] = useSearchParams();
   // null = AUTO: omit the symbol and let the backend auto-detect the primary
   // symbol server-side (every symbol-scoped endpoint supports this; OFI,
   // Monte Carlo, and Signal Conflict use their dedicated /auto routes).
-  const [symbol, setSymbol] = useState<string | null>(SYMBOLS[0]);
-  const [tab, setTab] = useState<TabId>("overview");
+  const symbolParam = searchParams.get("symbol");
+  const symbol: string | null = symbolParam === "auto" ? null : symbolParam && SYMBOLS.includes(symbolParam) ? symbolParam : SYMBOLS[0];
+  const tabParam = searchParams.get("tab");
+  const tab: TabId = (tabParam && TAB_IDS.has(tabParam) ? tabParam : "overview") as TabId;
+
+  const setSymbol = (next: string | null) =>
+    setSearchParams((prev) => {
+      const merged = new URLSearchParams(prev);
+      merged.set("symbol", next ?? "auto");
+      return merged;
+    }, { replace: true });
+  const setTab = (next: TabId) =>
+    setSearchParams((prev) => {
+      const merged = new URLSearchParams(prev);
+      merged.set("tab", next);
+      return merged;
+    }, { replace: true });
 
   const symbolChoices: (string | null)[] = [...SYMBOLS, null];
   const showSelector = SYMBOL_SCOPED.has(tab) || tab === "conflict";

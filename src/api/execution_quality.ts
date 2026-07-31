@@ -10,7 +10,9 @@ import { apiFetch } from "./client";
 
 export interface FeedStatus {
   symbol: string;
-  last_tick_at: string;
+  // null when this symbol has never received a single tick -- render
+  // "Never", not a fabricated "just now" beside a STALE badge.
+  last_tick_at: string | null;
   age_ms: number;
   staleness: "OK" | "WARN" | "STALE";
   sync_drift_ms: number;

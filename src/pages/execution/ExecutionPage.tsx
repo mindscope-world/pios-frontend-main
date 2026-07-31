@@ -309,7 +309,14 @@ export default function ExecutionPage() {
             value={portfolioMetrics.data ? `${portfolioMetrics.data.max_drawdown}%` : "—"}
             tone="amber"
           />
-          <PerfItem label="Equity" value={portfolioMetrics.data ? `$${portfolioMetrics.data.total_equity.toLocaleString()}` : "—"} />
+          <PerfItem
+            label="Equity"
+            value={
+              portfolioMetrics.data
+                ? `$${portfolioMetrics.data.total_equity.toLocaleString()}${portfolioMetrics.data.equity_is_estimated ? " (est.)" : ""}`
+                : "—"
+            }
+          />
         </div>
       </div>
 

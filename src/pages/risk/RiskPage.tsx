@@ -74,13 +74,19 @@ export default function RiskPage() {
             </p>
           ) : (
             <>
+              {capPreservation.data.equity_is_estimated && (
+                <p className="mb-2 text-[10.5px] leading-relaxed text-amber-400">
+                  No real balance history yet — current equity below is a placeholder $100,000, not this account's
+                  real balance, so the goal can't register as met from it.
+                </p>
+              )}
               <Row
                 label="Goal"
                 value={`$${capPreservation.data.goal_equity!.toLocaleString()} equity`}
               />
               <Row
                 label="Current equity"
-                value={`$${capPreservation.data.current_equity!.toLocaleString()} (${capPreservation.data.progress_pct}%)`}
+                value={`$${capPreservation.data.current_equity!.toLocaleString()} (${capPreservation.data.progress_pct}%)${capPreservation.data.equity_is_estimated ? " — estimated" : ""}`}
               />
               <div className="my-2 h-1.5 overflow-hidden rounded-full bg-surface-overlay">
                 <div

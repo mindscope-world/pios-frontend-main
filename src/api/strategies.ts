@@ -127,6 +127,10 @@ export interface StrategyOut {
   created_at: string;
   alpha_clock: AlphaClock | null;
   paper_gate: PaperGateStatus | null;
+  // Ticker strings (e.g. "BTC/USDT"), not symbol ids. Previously write-only
+  // (unreadable back from the API) -- see all_schemas.py's StrategyOut.
+  allowed_symbols: string[] | null;
+  allowed_regimes: string[] | null;
 }
 
 export interface StrategyCreatePayload {
