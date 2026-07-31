@@ -101,6 +101,25 @@ export function BrokerDetailModal({ brokerId, onClose }: { brokerId: string; onC
                 <div className="col-span-2">
                   <ReadField label="Last error" value={broker.data.error_message ?? "—"} />
                 </div>
+                {broker.data.broker_type === "MT5" && (
+                  <div className="col-span-2">
+                    <div className="mb-1 text-[9px] uppercase tracking-[.06em] text-text-ghost">
+                      Broker id (EA bridge InpBrokerId)
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate rounded border border-surface-border bg-surface-card px-2 py-1 font-mono text-[10.5px] text-text-primary">
+                        {broker.data.id}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(broker.data.id)}
+                        className="rounded-md border border-surface-border-strong px-2 py-1 text-[10px] font-semibold text-text-faint hover:text-text-primary"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {saveError && <p className="text-xs text-red">{saveError}</p>}
