@@ -4,7 +4,14 @@ import { createBroker } from "../../api/brokers";
 import { ApiError } from "../../api/client";
 import { supportsLiveTrading, type BrokerType } from "../../api/types";
 
-const BROKER_TYPES: BrokerType[] = ["ALPACA", "BINANCE", "CCXT", "IBKR", "OANDA", "LMAX", "MT5", "CUSTOM", "TRADOVATE"];
+// Kraken has no dedicated broker_type on the backend (broker_type enum has
+// no "KRAKEN" value) -- it already works today via the generic CCXTAdapter
+// (broker_type=CCXT, exchange_id="kraken"), same as Binance, but a user has
+// to already know that to find it. This is a display-only pseudo-option:
+// picking it just sets the real (CCXT, "kraken") state under the hood,
+// nothing new on the backend.
+type DisplaySelection = BrokerType | "KRAKEN";
+const DISPLAY_OPTIONS: DisplaySelection[] = ["ALPACA", "BINANCE", "KRAKEN", "CCXT", "IBKR", "OANDA", "LMAX", "MT5", "CUSTOM", "TRADOVATE"];
 
 // IBKR/LMAX/TRADOVATE repurpose the generic credential fields for
 // broker-specific identifiers (see broker_service.py's IBKRAdapter /
@@ -45,6 +52,21 @@ export function BrokerFormModal({ onClose }: { onClose: () => void }) {
 
   const liveCapable = supportsLiveTrading(brokerType);
   const effectiveIsPaper = liveCapable ? isPaper : true;
+  const displaySelection: DisplaySelection = brokerType === "CCXT" && exchangeId.trim().toLowerCase() === "kraken" ? "KRAKEN" : brokerType;
+  const handleDisplaySelect = (next: DisplaySelection) => {
+    if (next === "KRAKEN") {
+      setBrokerType("CCXT");
+      setExchangeId("kraken");
+    } else {
+      // exchange_id is sent unconditionally regardless of broker_type
+      // (CCXTAdapter's own resolution ignores broker_type in favor of
+      // exchange_id when both are set) -- clear it so switching away from
+      // Kraken/CCXT to e.g. Binance doesn't silently keep pointing at
+      // Kraken under a different displayed label.
+      if (next !== "CCXT") setExchangeId("");
+      setBrokerType(next);
+    }
+  };
 
   const create = useMutation({
     mutationFn: () =>
@@ -86,14 +108,14 @@ export function BrokerFormModal({ onClose }: { onClose: () => void }) {
           <div>
             <label className="mb-1 block text-xs font-medium text-text-muted">Broker type</label>
             <select
-              value={brokerType}
-              onChange={(e) => setBrokerType(e.target.value as BrokerType)}
+              value={displaySelection}
+              onChange={(e) => handleDisplaySelect(e.target.value as DisplaySelection)}
               className="w-full rounded-md border border-surface-border bg-surface-raised px-3 py-2 text-sm text-text-primary outline-none"
             >
-              {BROKER_TYPES.map((t) => (
+              {DISPLAY_OPTIONS.map((t) => (
                 <option key={t} value={t}>
-                  {t}
-                  {!supportsLiveTrading(t) ? " (simulated fills only)" : ""}
+                  {t === "KRAKEN" ? "KRAKEN" : t}
+                  {t !== "KRAKEN" && !supportsLiveTrading(t) ? " (simulated fills only)" : ""}
                 </option>
               ))}
             </select>
