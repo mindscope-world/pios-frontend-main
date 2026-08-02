@@ -13,6 +13,7 @@ import {
 import { useCachedIntelligence } from "../../api/useIntelligence";
 import { getTickerSnapshots } from "../../api/market";
 import { getPortfolioMetrics, listPositions } from "../../api/positions";
+import { getAutoExecutionStatus } from "../../api/autoExecution";
 import { IntelligenceEmptyState } from "../../components/ui/IntelligenceEmptyState";
 import { NullableNumber } from "../../components/ui/NullableNumber";
 import { formatMoney } from "../../utils/currency";
@@ -133,6 +134,27 @@ export default function ExecutionPage() {
   const [picker, setPicker] = useState<"crypto" | "forex" | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // First-load-only default: with no ?symbol= yet (a brand-new session,
+  // not the return-from-navigation case the URL persistence above already
+  // covers), this used to always land on BTC/USDT regardless of where a
+  // live opportunity actually existed -- confusing when the account's real
+  // Automatic-allocation activity is in forex/gold, not crypto. If the
+  // account has any currently-armed symbol, default to it instead; falls
+  // through to the crypto default unchanged when nothing is armed yet.
+  const hadSymbolParam = searchParams.get("symbol") !== null;
+  const armedStatus = useQuery({
+    queryKey: ["auto-execution-status"],
+    queryFn: getAutoExecutionStatus,
+    enabled: !hadSymbolParam,
+    staleTime: 30000,
+  });
+  useEffect(() => {
+    if (hadSymbolParam || !armedStatus.data) return;
+    const firstArmed = armedStatus.data.find((row) => row.is_armed && row.symbol);
+    if (firstArmed?.symbol) setSymbol(firstArmed.symbol.symbol);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armedStatus.data, hadSymbolParam]);
 
   // Full Alpaca crypto currency list — cached an hour both client- and
   // server-side since Alpaca's listing changes rarely (see the backend's
