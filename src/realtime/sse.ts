@@ -17,6 +17,17 @@ import { refreshOnce } from "../api/client";
 const API_ROOT = `${(import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ""}/api/v1`;
 const RECONNECT_DELAY_MS = 2000;
 const AUTH_FAILURE_RETRY_DELAY_MS = 4000;
+// Backend's own SSE keepalive is a "heartbeat" event every 25s
+// (intelligence.py's _HEARTBEAT_SECS) — 2x that plus slack is a stale-read
+// watchdog. Without this, a connection that goes silently quiet (no FIN/RST
+// — the server generator stalls on a slow/hung await, or a proxy drops
+// packets without closing the socket) leaves reader.read() awaiting
+// forever: readStream() never returns, run()'s while loop never reaches
+// its reconnect branch, and the UI's "last heartbeat" display freezes
+// indefinitely instead of reconnecting. Found investigating a reported
+// stream-timer freeze that didn't correspond to any client-side clock or
+// network issue.
+const READ_STALL_TIMEOUT_MS = 60000;
 
 export interface SSEEvent {
   event: string;
@@ -49,7 +60,20 @@ async function readStream(body: ReadableStream<Uint8Array>, onEvent: EventHandle
   try {
     while (true) {
       if (signal.aborted) return;
-      const { value, done } = await reader.read();
+
+      let stalled = false;
+      const stallTimer = setTimeout(() => {
+        stalled = true;
+        reader.cancel().catch(() => {});
+      }, READ_STALL_TIMEOUT_MS);
+      let value: Uint8Array | undefined;
+      let done: boolean;
+      try {
+        ({ value, done } = await reader.read());
+      } finally {
+        clearTimeout(stallTimer);
+      }
+      if (stalled) throw new Error("SSE stream stalled — no data within READ_STALL_TIMEOUT_MS");
       if (done) return;
       buffer += decoder.decode(value, { stream: true });
 
