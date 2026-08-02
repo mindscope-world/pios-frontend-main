@@ -20,7 +20,9 @@ export function SymbolPickerModal({
   selected: string;
   onSelect: (symbol: string) => void;
   onClose: () => void;
-  snapshotFor: (symbol: string) => TickerSnapshot | undefined;
+  // Optional — pages with no live ticker-snapshot query (e.g. IntelligencePage)
+  // just get a plain symbol list, no price/change chips.
+  snapshotFor?: (symbol: string) => TickerSnapshot | undefined;
 }) {
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => {
@@ -49,7 +51,7 @@ export function SymbolPickerModal({
         />
         <div className="grid flex-1 grid-cols-2 content-start gap-1.5 overflow-y-auto pr-1 sm:grid-cols-3">
           {filtered.map((s) => {
-            const snap = snapshotFor(s);
+            const snap = snapshotFor?.(s);
             return (
               <button
                 key={s}

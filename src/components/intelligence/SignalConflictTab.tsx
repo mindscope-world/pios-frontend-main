@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { getSignalConflict, getSignalConflictAuto } from "../../api/intelligence";
+import { getSignalConflict } from "../../api/intelligence";
 import { Card, Loading, Pill, Row } from "./shared";
 
 // Verified against app/services/intelligence/signal_conflict_service.py's
-// compute_signal_conflict() — live, auto-detects the primary symbol
-// server-side (no symbol param exists on this route at all).
+// compute_signal_conflict() — live, takes an optional `symbol` (auto-detects
+// the primary symbol when omitted), same convention as every other
+// symbol-scoped tab (OFI, Monte Carlo, ...). Previously had no symbol param
+// at all despite its own response already self-labeling which symbol it
+// used — fixed 2026-08-03.
 interface SignalConflictPayload {
   error?: string;
   symbol?: string;
@@ -22,13 +25,10 @@ const LEVEL_TONE: Record<string, "green" | "amber" | "red" | "neutral"> = {
   HIGH: "red",
 };
 
-export function SignalConflictTab({ auto = false }: { auto?: boolean }) {
+export function SignalConflictTab({ symbol }: { symbol?: string }) {
   const sc = useQuery({
-    queryKey: ["signal-conflict", auto],
-    // Both routes are live-computed for the primary symbol; AUTO selects the
-    // dedicated /signal-conflict/auto variant (raw detector output, same
-    // fields minus the regime/momentum wrapper — all optional here anyway).
-    queryFn: () => (auto ? getSignalConflictAuto() : getSignalConflict()) as unknown as Promise<SignalConflictPayload>,
+    queryKey: ["signal-conflict", symbol ?? "auto"],
+    queryFn: () => getSignalConflict(symbol) as unknown as Promise<SignalConflictPayload>,
     staleTime: 20000,
     refetchOnWindowFocus: false,
   });

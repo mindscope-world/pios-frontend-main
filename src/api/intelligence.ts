@@ -80,8 +80,9 @@ export const getMonteCarlo = (params: { symbol?: string; simulations?: number; h
 export const getMonteCarloAuto = (params: { simulations?: number; horizon_days?: number } = {}) =>
   apiFetch<Payload>(`/intelligence/montecarlo/auto${buildQuery(params)}`);
 
-// No symbol param at all — auto-detects the primary symbol server-side.
-export const getSignalConflict = () => apiFetch<Payload>("/intelligence/signal-conflict");
+// Optional symbol — auto-detects the primary symbol server-side when omitted.
+export const getSignalConflict = (symbol?: string) =>
+  apiFetch<Payload>(`/intelligence/signal-conflict${buildQuery({ symbol })}`);
 export const getSignalConflictAuto = () => apiFetch<Payload>("/intelligence/signal-conflict/auto");
 export const getOfiAuto = () => apiFetch<Payload>("/intelligence/ofi/auto");
 export const getGmigEnhanced = () => apiFetch<Payload>("/intelligence/gmig/enhanced");
