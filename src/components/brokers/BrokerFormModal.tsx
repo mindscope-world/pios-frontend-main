@@ -11,7 +11,10 @@ import { supportsLiveTrading, type BrokerType } from "../../api/types";
 // picking it just sets the real (CCXT, "kraken") state under the hood,
 // nothing new on the backend.
 type DisplaySelection = BrokerType | "KRAKEN";
-const DISPLAY_OPTIONS: DisplaySelection[] = ["ALPACA", "BINANCE", "KRAKEN", "CCXT", "IBKR", "OANDA", "LMAX", "MT5", "CUSTOM", "TRADOVATE"];
+// Crypto-only operating mode: keep the form scoped to exchange-backed
+// connections. Suspended MT5/OANDA records remain in the backend for a later
+// reactivation, but cannot be added from this UI.
+const DISPLAY_OPTIONS: DisplaySelection[] = ["BINANCE", "KRAKEN", "CCXT"];
 
 // IBKR/LMAX/TRADOVATE repurpose the generic credential fields for
 // broker-specific identifiers (see broker_service.py's IBKRAdapter /

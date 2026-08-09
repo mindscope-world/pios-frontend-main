@@ -118,7 +118,7 @@ export interface ConfirmDecisionPayload {
 }
 
 // Autonomous execution (AUTO trading mode) — mirrors app/schemas/all_schemas.py's
-// AutoExecutionArm/DisarmRequest + AutoExecutionArmingOut. Paper MT5 brokers
+// AutoExecutionArm/DisarmRequest + AutoExecutionArmingOut. Paper CCXT/Binance brokers
 // only, per-symbol arming, three circuit breakers; see AutomaticControl.tsx.
 export interface AutoExecutionArmPayload {
   symbol: string;
@@ -282,11 +282,9 @@ export type BrokerType = "MT5" | "IBKR" | "ALPACA" | "OANDA" | "CCXT" | "LMAX" |
 // app/services/broker_service.py ADAPTER_MAP — the only broker types with a
 // real (non-simulated) adapter. Everything else in BrokerType forces
 // is_paper=true or the backend raises 422 UnsupportedBrokerError.
-// MT5 has no REST API to call out to -- its adapter depends on an Expert
-// Advisor connecting to /ws/mt5/{broker_id} with the broker's `passphrase`
-// as a bridge token. Live trading works once that EA is paired; until then
-// orders fail fast with a clear "EA not connected" rejection rather than a
-// silent paper fill.
+// CCXT/Binance brokers use REST APIs for order submission -- live trading
+// works once valid API credentials are configured; until then orders fail
+// fast with authentication errors rather than silent paper fills.
 // IBKR/LMAX/TRADOVATE: real adapters exist (2026-07-23) but are scaffolded,
 // not live-verified — no funded/paper account or gateway access exists in
 // this dev environment for any of the three (see Final_development.md §1).
